@@ -531,8 +531,22 @@ class _Flashcard extends StatelessWidget {
       );
 }
 
-class StreakPage extends StatelessWidget {
+class StreakPage extends StatefulWidget {
   const StreakPage({super.key});
+
+  @override
+  State<StreakPage> createState() => _StreakPageState();
+}
+
+class _StreakPageState extends State<StreakPage> {
+  final _todoController = TextEditingController();
+
+  @override
+  void dispose() {
+    _todoController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -576,6 +590,18 @@ class StreakPage extends StatelessWidget {
                 child: _StatBlock(
                     label: 'REST ALLOWANCE', value: '3d', color: _pink))
           ]),
+          const SizedBox(height: 24),
+          _TodoSection(
+              controller: _todoController,
+              todos: state.todos,
+              onAdd: () async {
+                await context.read<AppState>().addTodo(_todoController.text);
+                _todoController.clear();
+              },
+              onToggle: context.read<AppState>().toggleTodo,
+              onDelete: context.read<AppState>().deleteTodo),
+          const SizedBox(height: 24),
+          _StreakBars(days: state.days),
           const SizedBox(height: 24),
           const Text('GRACE LOGIC',
               style: TextStyle(
@@ -637,6 +663,213 @@ class StreakPage extends StatelessWidget {
     );
   }
 }
+
+class _TodoSection extends StatelessWidget {
+  const _TodoSection({
+    required this.controller,
+    required this.todos,
+    required this.onAdd,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  final TextEditingController controller;
+  final List<TodoItem> todos;
+  final VoidCallback onAdd;
+  final ValueChanged<String> onToggle;
+  final ValueChanged<String> onDelete;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('TODAY\'S TODO',
+              style: TextStyle(
+                  color: _muted,
+                  fontSize: 11,
+                  letterSpacing: 1.4,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+                child: TextField(
+                    controller: controller,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => onAdd(),
+                    decoration: const InputDecoration(
+                        hintText: 'Add a study task',
+                        prefixIcon: Icon(Icons.add_task_rounded)))),
+            const SizedBox(width: 8),
+            IconButton.filled(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_rounded),
+                tooltip: 'Add todo'),
+          ]),
+          if (todos.isEmpty)
+            const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text('No tasks yet. Add one small next step.',
+                    style: TextStyle(color: _muted, fontSize: 12)))
+          else
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                    children: todos
+                        .map((todo) => _TodoRow(
+                            todo: todo,
+                            onToggle: onToggle,
+                            onDelete: onDelete))
+                        .toList())),
+        ],
+      );
+}
+
+class _TodoRow extends StatelessWidget {
+  const _TodoRow(
+      {required this.todo, required this.onToggle, required this.onDelete});
+
+  final TodoItem todo;
+  final ValueChanged<String> onToggle;
+  final ValueChanged<String> onDelete;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(children: [
+          Checkbox(
+              value: todo.isDone,
+              onChanged: (_) => onToggle(todo.id),
+              activeColor: _teal),
+          Expanded(
+              child: Text(todo.title,
+                  style: TextStyle(
+                      color: todo.isDone ? _muted : null,
+                      decoration:
+                          todo.isDone ? TextDecoration.lineThrough : null))),
+          IconButton(
+              onPressed: () => onDelete(todo.id),
+              icon: const Icon(Icons.content_cut_rounded, size: 18),
+              tooltip: 'Cut todo'),
+        ]),
+      );
+}
+
+class _StreakBars extends StatelessWidget {
+  const _StreakBars({required this.days});
+
+  final List<StudyDay> days;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final recent = List.generate(
+        7, (index) => now.subtract(Duration(days: 6 - index)));
+    final minutes = recent.map((date) {
+      final day = days.where((item) => _sameDate(item.date, date)).firstOrNull;
+      return day?.minutes ?? 0;
+    }).toList();
+    final peak = max(1, minutes.fold<int>(0, max));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('STREAK + GAINS',
+          style: TextStyle(
+              color: _muted,
+              fontSize: 11,
+              letterSpacing: 1.4,
+              fontWeight: FontWeight.bold)),
+      const SizedBox(height: 10),
+      Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: _surface, borderRadius: BorderRadius.circular(16)),
+          child: Column(children: [
+            _BarLegend(label: 'STREAK', color: _peach),
+            const SizedBox(height: 10),
+            for (var index = 0; index < recent.length; index++)
+              _DayBar(
+                  label: _dayLabel(recent[index]),
+                  value: minutes[index] > 0 ? 1 : 0,
+                  maxValue: 1,
+                  valueLabel: minutes[index] > 0 ? 'ON' : '--',
+                  color: _peach),
+            const SizedBox(height: 14),
+            _BarLegend(label: 'STUDY GAINS', color: _teal),
+            const SizedBox(height: 10),
+            for (var index = 0; index < recent.length; index++)
+              _DayBar(
+                  label: _dayLabel(recent[index]),
+                  value: minutes[index],
+                  maxValue: peak,
+                  valueLabel: '${minutes[index]}m',
+                  color: _teal),
+          ])),
+    ]);
+  }
+}
+
+class _BarLegend extends StatelessWidget {
+  const _BarLegend({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        Container(width: 8, height: 8, color: color),
+        const SizedBox(width: 8),
+        Text(label,
+            style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1)),
+      ]);
+}
+
+class _DayBar extends StatelessWidget {
+  const _DayBar({
+    required this.label,
+    required this.value,
+    required this.maxValue,
+    required this.valueLabel,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final int maxValue;
+  final String valueLabel;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Row(children: [
+          SizedBox(
+              width: 28,
+              child: Text(label,
+                  style: const TextStyle(color: _muted, fontSize: 10))),
+          Expanded(
+              child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                      minHeight: 7,
+                      value: value / maxValue,
+                      backgroundColor: _mantle,
+                      color: color))),
+          SizedBox(
+              width: 34,
+              child: Text(valueLabel,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(color: color, fontSize: 10))),
+        ]),
+      );
+}
+
+bool _sameDate(DateTime left, DateTime right) =>
+    left.year == right.year && left.month == right.month && left.day == right.day;
+
+String _dayLabel(DateTime date) =>
+    const ['M', 'T', 'W', 'T', 'F', 'S', 'S'][date.weekday - 1];
 
 class _StatBlock extends StatelessWidget {
   const _StatBlock(

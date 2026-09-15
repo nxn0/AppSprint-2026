@@ -15,6 +15,7 @@ class AppState extends ChangeNotifier {
   List<FlashcardDeck> decks = [];
   String? selectedDeckId;
   List<StudyDay> days = [];
+  List<TodoItem> todos = [];
   bool isRunning = false;
   bool isBreak = false;
   bool isLongBreak = false;
@@ -42,6 +43,7 @@ class AppState extends ChangeNotifier {
     }
     selectedDeckId = decks.firstOrNull?.id;
     days = store.days;
+    todos = store.todos;
     completedSessions = store.completedSessions;
     totalFocusMinutes = store.totalFocusMinutes;
     notifyListeners();
@@ -165,6 +167,33 @@ class AppState extends ChangeNotifier {
   Future<void> addCards(List<Flashcard> parsed) async {
     cards = [...cards, ...parsed];
     await store.saveCards(cards);
+    notifyListeners();
+  }
+
+  Future<void> addTodo(String title) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    todos = [
+      ...todos,
+      TodoItem(id: '${DateTime.now().microsecondsSinceEpoch}', title: trimmed),
+    ];
+    await store.saveTodos(todos);
+    notifyListeners();
+  }
+
+  Future<void> toggleTodo(String todoId) async {
+    todos = todos
+        .map((todo) => todo.id == todoId
+            ? todo.copyWith(isDone: !todo.isDone)
+            : todo)
+        .toList();
+    await store.saveTodos(todos);
+    notifyListeners();
+  }
+
+  Future<void> deleteTodo(String todoId) async {
+    todos = todos.where((todo) => todo.id != todoId).toList();
+    await store.saveTodos(todos);
     notifyListeners();
   }
 

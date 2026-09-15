@@ -24,6 +24,9 @@ class LocalStore {
   List<StudyDay> get days => decodeDays(_preferences.getString('days'));
   Future<void> saveDays(List<StudyDay> value) =>
       _preferences.setString('days', encodeDays(value));
+    List<TodoItem> get todos => decodeTodos(_preferences.getString('todos'));
+    Future<void> saveTodos(List<TodoItem> value) =>
+      _preferences.setString('todos', encodeTodos(value));
 
   int get completedSessions => _preferences.getInt('completedSessions') ?? 0;
   Future<void> saveCompletedSessions(int value) =>

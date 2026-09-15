@@ -115,6 +115,36 @@ class StudyDay {
       );
 }
 
+class TodoItem {
+  const TodoItem({
+    required this.id,
+    required this.title,
+    this.isDone = false,
+  });
+
+  final String id;
+  final String title;
+  final bool isDone;
+
+  TodoItem copyWith({bool? isDone}) => TodoItem(
+        id: id,
+        title: title,
+        isDone: isDone ?? this.isDone,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'isDone': isDone,
+      };
+
+  factory TodoItem.fromJson(Map<String, dynamic> json) => TodoItem(
+        id: json['id'] as String? ?? '',
+        title: json['title'] as String? ?? '',
+        isDone: json['isDone'] as bool? ?? false,
+      );
+}
+
 String encodeCards(List<Flashcard> cards) =>
     jsonEncode(cards.map((card) => card.toJson()).toList());
 List<Flashcard> decodeCards(String? raw) => raw == null
@@ -138,4 +168,13 @@ List<StudyDay> decodeDays(String? raw) => raw == null
     ? <StudyDay>[]
     : (jsonDecode(raw) as List<dynamic>)
         .map((item) => StudyDay.fromJson(item as Map<String, dynamic>))
+        .toList();
+
+    String encodeTodos(List<TodoItem> todos) =>
+      jsonEncode(todos.map((todo) => todo.toJson()).toList());
+
+    List<TodoItem> decodeTodos(String? raw) => raw == null
+      ? <TodoItem>[]
+      : (jsonDecode(raw) as List<dynamic>)
+        .map((item) => TodoItem.fromJson(item as Map<String, dynamic>))
         .toList();
