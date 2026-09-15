@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 class Flashcard {
   const Flashcard({
@@ -9,6 +10,12 @@ class Flashcard {
     this.source = '',
     this.confidence = 0.5,
     this.needsSource = false,
+    this.dueAt,
+    this.intervalDays = 0,
+    this.ease = 2.5,
+    this.repetitions = 0,
+    this.lapses = 0,
+    this.lastReviewed,
   });
 
   final String front;
@@ -18,8 +25,22 @@ class Flashcard {
   final String source;
   final double confidence;
   final bool needsSource;
+  final DateTime? dueAt;
+  final int intervalDays;
+  final double ease;
+  final int repetitions;
+  final int lapses;
+  final DateTime? lastReviewed;
 
-  Flashcard copyWith({bool? isMastered}) => Flashcard(
+  Flashcard copyWith({
+    bool? isMastered,
+    DateTime? dueAt,
+    int? intervalDays,
+    double? ease,
+    int? repetitions,
+    int? lapses,
+    DateTime? lastReviewed,
+  }) => Flashcard(
         front: front,
         back: back,
         isMastered: isMastered ?? this.isMastered,
@@ -27,6 +48,12 @@ class Flashcard {
         source: source,
         confidence: confidence,
         needsSource: needsSource,
+        dueAt: dueAt ?? this.dueAt,
+        intervalDays: intervalDays ?? this.intervalDays,
+        ease: ease ?? this.ease,
+        repetitions: repetitions ?? this.repetitions,
+        lapses: lapses ?? this.lapses,
+        lastReviewed: lastReviewed ?? this.lastReviewed,
       );
 
   Map<String, dynamic> toJson() => {
@@ -37,6 +64,12 @@ class Flashcard {
         'source': source,
         'confidence': confidence,
         'needsSource': needsSource,
+        'dueAt': dueAt?.toIso8601String(),
+        'intervalDays': intervalDays,
+        'ease': ease,
+        'repetitions': repetitions,
+        'lapses': lapses,
+        'lastReviewed': lastReviewed?.toIso8601String(),
       };
 
   factory Flashcard.fromJson(Map<String, dynamic> json) => Flashcard(
@@ -47,7 +80,66 @@ class Flashcard {
         source: json['source'] as String? ?? '',
         confidence: (json['confidence'] as num?)?.toDouble() ?? 0.5,
         needsSource: json['needsSource'] as bool? ?? false,
+        dueAt: DateTime.tryParse(json['dueAt'] as String? ?? ''),
+        intervalDays: json['intervalDays'] as int? ?? 0,
+        ease: (json['ease'] as num?)?.toDouble() ?? 2.5,
+        repetitions: json['repetitions'] as int? ?? 0,
+        lapses: json['lapses'] as int? ?? 0,
+        lastReviewed: DateTime.tryParse(json['lastReviewed'] as String? ?? ''),
       );
+}
+
+enum ReviewRating { again, hard, good, easy }
+
+extension FlashcardReview on Flashcard {
+  bool isDue([DateTime? now]) =>
+      dueAt == null || !dueAt!.isAfter(now ?? DateTime.now());
+
+  Flashcard scheduled(ReviewRating rating, {DateTime? now}) {
+    final reviewedAt = now ?? DateTime.now();
+    var nextEase = ease;
+    var nextRepetitions = repetitions;
+    var nextLapses = lapses;
+    var nextInterval = intervalDays;
+    late DateTime nextDue;
+
+    switch (rating) {
+      case ReviewRating.again:
+        nextEase = (ease - .2).clamp(1.3, 3.0).toDouble();
+        nextRepetitions = 0;
+        nextLapses++;
+        nextInterval = 0;
+        nextDue = reviewedAt.add(const Duration(minutes: 10));
+      case ReviewRating.hard:
+        nextEase = (ease - .15).clamp(1.3, 3.0).toDouble();
+        nextRepetitions++;
+        nextInterval = max(1, (intervalDays == 0 ? 1 : intervalDays * 1.2).round());
+        nextDue = reviewedAt.add(Duration(days: nextInterval));
+      case ReviewRating.good:
+        nextRepetitions++;
+        nextInterval = repetitions == 0
+            ? 1
+            : repetitions == 1
+                ? 3
+                : max(1, (intervalDays * ease).round());
+        nextDue = reviewedAt.add(Duration(days: nextInterval));
+      case ReviewRating.easy:
+        nextEase = (ease + .15).clamp(1.3, 3.0).toDouble();
+        nextRepetitions++;
+        nextInterval = repetitions == 0
+            ? 4
+            : max(1, (intervalDays * nextEase * 1.3).round());
+        nextDue = reviewedAt.add(Duration(days: nextInterval));
+    }
+    return copyWith(
+      dueAt: nextDue,
+      intervalDays: nextInterval,
+      ease: nextEase,
+      repetitions: nextRepetitions,
+      lapses: nextLapses,
+      lastReviewed: reviewedAt,
+    );
+  }
 }
 
 class FlashcardDeck {
@@ -95,10 +187,18 @@ class FlashcardDeck {
 }
 
 class StudyDay {
-  const StudyDay({required this.date, this.minutes = 0, this.restReason});
+  const StudyDay({
+    required this.date,
+    this.minutes = 0,
+    this.reviews = 0,
+    this.completedTodos = 0,
+    this.restReason,
+  });
 
   final DateTime date;
   final int minutes;
+  final int reviews;
+  final int completedTodos;
   final String? restReason;
 
   bool get isRest => restReason != null;
@@ -106,12 +206,16 @@ class StudyDay {
   Map<String, dynamic> toJson() => {
         'date': date.toIso8601String(),
         'minutes': minutes,
+        'reviews': reviews,
+        'completedTodos': completedTodos,
         'restReason': restReason,
       };
 
   factory StudyDay.fromJson(Map<String, dynamic> json) => StudyDay(
         date: DateTime.parse(json['date'] as String),
         minutes: json['minutes'] as int? ?? 0,
+        reviews: json['reviews'] as int? ?? 0,
+        completedTodos: json['completedTodos'] as int? ?? 0,
         restReason: json['restReason'] as String?,
       );
 }

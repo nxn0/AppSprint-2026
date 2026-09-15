@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.pomly"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

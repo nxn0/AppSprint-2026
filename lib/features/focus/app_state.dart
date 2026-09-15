@@ -23,6 +23,7 @@ class AppState extends ChangeNotifier {
   int completedSessions = 0;
   int totalFocusMinutes = 0;
   Timer? _timer;
+  int _focusElapsedSeconds = 0;
 
   Future<void> initialize() async {
     moniker = store.moniker ?? _makeMoniker();
@@ -53,7 +54,7 @@ class AppState extends ChangeNotifier {
 
   int get streak {
     final activeDates = days
-        .where((day) => day.minutes > 0)
+      .where((day) => day.minutes > 0 || day.reviews > 0 || day.completedTodos > 0)
         .map((day) => _dateKey(day.date))
         .toSet();
     var cursor = DateTime.now();
@@ -101,10 +102,7 @@ class AppState extends ChangeNotifier {
         }
       } else {
         completedSessions++;
-        totalFocusMinutes += 25;
-        unawaited(_logStudy(25));
         unawaited(store.saveCompletedSessions(completedSessions));
-        unawaited(store.saveTotalFocusMinutes(totalFocusMinutes));
         isBreak = true;
         isLongBreak = completedSessions % 5 == 0;
         remaining = isLongBreak
@@ -116,6 +114,14 @@ class AppState extends ChangeNotifier {
       }
     } else {
       remaining -= const Duration(seconds: 1);
+        if (!isBreak) {
+          _focusElapsedSeconds++;
+          if (_focusElapsedSeconds % 60 == 0) {
+            totalFocusMinutes++;
+            unawaited(logActivity(minutes: 1));
+            unawaited(store.saveTotalFocusMinutes(totalFocusMinutes));
+          }
+        }
     }
     notifyListeners();
   }
@@ -138,22 +144,6 @@ class AppState extends ChangeNotifier {
       _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     }
     notifyListeners();
-  }
-
-  Future<void> _logStudy(int minutes) async {
-    final today = DateTime.now();
-    final index =
-        days.indexWhere((day) => _dateKey(day.date) == _dateKey(today));
-    final updated = StudyDay(
-      date: today,
-      minutes: (index == -1 ? 0 : days[index].minutes) + minutes,
-    );
-    if (index == -1) {
-      days = [...days, updated];
-    } else {
-      days = [...days]..[index] = updated;
-    }
-    await store.saveDays(days);
   }
 
   Future<void> logRest(String reason) async {
@@ -184,12 +174,14 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> toggleTodo(String todoId) async {
+    final wasDone = todos.where((todo) => todo.id == todoId).firstOrNull?.isDone ?? false;
     todos = todos
         .map((todo) => todo.id == todoId
             ? todo.copyWith(isDone: !todo.isDone)
             : todo)
         .toList();
     await store.saveTodos(todos);
+    if (!wasDone) await logActivity(completedTodos: 1);
     notifyListeners();
   }
 
@@ -234,6 +226,44 @@ class AppState extends ChangeNotifier {
 
   FlashcardDeck? get selectedDeck =>
       decks.where((deck) => deck.id == selectedDeckId).firstOrNull;
+
+  List<int> get dueCardIndexes {
+    final deck = selectedDeck;
+    if (deck == null) return const [];
+    final now = DateTime.now();
+    return [
+      for (var index = 0; index < deck.cards.length; index++)
+        if (deck.cards[index].isDue(now)) index,
+    ];
+  }
+
+  Future<void> reviewDeckCard(int index, ReviewRating rating) async {
+    final deck = selectedDeck;
+    if (deck == null || index < 0 || index >= deck.cards.length) return;
+    final updatedCards = [...deck.cards]
+      ..[index] = deck.cards[index].scheduled(rating);
+    final updated = deck.copyWith(cards: updatedCards);
+    decks = decks.map((item) => item.id == deck.id ? updated : item).toList();
+    await store.saveDecks(decks);
+    await logActivity(reviews: 1);
+    notifyListeners();
+  }
+
+  Future<void> logActivity({int minutes = 0, int reviews = 0, int completedTodos = 0}) async {
+    if (minutes == 0 && reviews == 0 && completedTodos == 0) return;
+    final today = DateTime.now();
+    final key = _dateKey(today);
+    final index = days.indexWhere((day) => _dateKey(day.date) == key);
+    final current = index == -1 ? StudyDay(date: today) : days[index];
+    final updated = StudyDay(
+      date: today,
+      minutes: current.minutes + minutes,
+      reviews: current.reviews + reviews,
+      completedTodos: current.completedTodos + completedTodos,
+    );
+    days = index == -1 ? [...days, updated] : [...days]..[index] = updated;
+    await store.saveDays(days);
+  }
 
   Future<void> toggleDeckMastery(int index) async {
     final deck = selectedDeck;

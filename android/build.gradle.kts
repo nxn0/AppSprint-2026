@@ -1,3 +1,7 @@
+import org.gradle.api.Project
+import org.gradle.api.ProjectEvaluationListener
+import org.gradle.api.ProjectState
+
 allprojects {
     repositories {
         google()
@@ -18,6 +22,16 @@ subprojects {
 subprojects {
     project.evaluationDependsOn(":app")
 }
+
+gradle.addListener(object : ProjectEvaluationListener {
+    override fun beforeEvaluate(project: Project) = Unit
+
+    override fun afterEvaluate(project: Project, state: ProjectState) {
+        project.extensions.findByType<com.android.build.api.dsl.LibraryExtension>()?.let {
+            it.compileSdk = 36
+        }
+    }
+})
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)

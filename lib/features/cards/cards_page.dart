@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -18,7 +16,6 @@ class CardsPage extends StatefulWidget {
 
 class _CardsPageState extends State<CardsPage> {
   final _notes = TextEditingController();
-  int _active = 0;
   bool _isImporting = false;
   int _cardLimit = 30;
 
@@ -32,10 +29,6 @@ class _CardsPageState extends State<CardsPage> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final deck = state.selectedDeck;
-    final activeIndex = deck == null || deck.cards.isEmpty
-        ? 0
-        : min(_active, deck.cards.length - 1);
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
       children: [
@@ -55,7 +48,6 @@ class _CardsPageState extends State<CardsPage> {
             onDeleted: _confirmDeleteDeck,
             onChanged: (deckId) {
               context.read<AppState>().selectDeck(deckId);
-              setState(() => _active = 0);
             },
           ),
         if (state.decks.isNotEmpty) const SizedBox(height: 18),
@@ -165,67 +157,9 @@ class _CardsPageState extends State<CardsPage> {
           ),
         ),
         const SizedBox(height: 24),
-        if (deck == null || deck.cards.isEmpty)
-          const _EmptyState()
-        else ...[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'YOUR DECK',
-                style: TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 11,
-                  letterSpacing: 1.4,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '${deck.cards.length} cards',
-                style: const TextStyle(color: AppColors.muted, fontSize: 11),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _Flashcard(card: deck.cards[activeIndex], index: activeIndex),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: activeIndex == 0
-                    ? null
-                    : () => setState(() => _active = activeIndex - 1),
-                icon: const Icon(Icons.chevron_left_rounded),
-                label: const Text('Previous'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: activeIndex >= deck.cards.length - 1
-                    ? null
-                    : () => setState(() => _active = activeIndex + 1),
-                icon: const Icon(Icons.chevron_right_rounded),
-                label: const Text('Next'),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => context.read<AppState>().toggleDeckMastery(activeIndex),
-              icon: Icon(
-                deck.cards[activeIndex].isMastered
-                    ? Icons.check_circle
-                    : Icons.circle_outlined,
-              ),
-              label: Text(
-                deck.cards[activeIndex].isMastered ? 'Mastered' : 'Mark mastered',
-              ),
-            ),
-          ),
-        ],
+        if (deck != null) _ReviewPanel(deck: deck),
+        if (deck != null) const SizedBox(height: 24),
+        if (deck == null || deck.cards.isEmpty) const _EmptyState(),
       ],
     );
   }
@@ -304,9 +238,185 @@ class _CardsPageState extends State<CardsPage> {
     );
     if (confirmed == true && mounted) {
       await context.read<AppState>().deleteDeck(deckId);
-      setState(() => _active = 0);
     }
   }
+}
+
+class _ReviewPanel extends StatefulWidget {
+  const _ReviewPanel({required this.deck});
+
+  final FlashcardDeck deck;
+
+  @override
+  State<_ReviewPanel> createState() => _ReviewPanelState();
+}
+
+class _ReviewPanelState extends State<_ReviewPanel> {
+  bool _showAnswer = false;
+  int _position = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final deck = state.selectedDeck ?? widget.deck;
+    final dueIndexes = state.dueCardIndexes;
+    if (dueIndexes.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: const Row(children: [
+          Icon(Icons.check_circle_outline_rounded, color: AppColors.teal),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text('You are caught up. Come back when the next card is due.'),
+          ),
+        ]),
+      );
+    }
+
+    final selectedPosition = _position.clamp(0, dueIndexes.length - 1);
+    final index = dueIndexes[selectedPosition];
+    final card = deck.cards[index];
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.teal.withValues(alpha: .35)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text(
+            'REVIEW SESSION',
+            style: TextStyle(
+              color: AppColors.teal,
+              fontSize: 11,
+              letterSpacing: 1.4,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text('${dueIndexes.length} due',
+              style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+        ]),
+        const SizedBox(height: 18),
+        const Text('DEFINITION',
+            style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _showAnswer ? null : () => setState(() => _showAnswer = true),
+          child: Text(card.back,
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+        ),
+        if (_showAnswer) ...[
+          const SizedBox(height: 14),
+          const Text('ANSWER',
+              style: TextStyle(color: AppColors.muted, fontSize: 11)),
+          const SizedBox(height: 6),
+          Text(card.front, style: const TextStyle(fontSize: 18)),
+          const SizedBox(height: 18),
+          const Text('How well did you remember it?',
+              style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: selectedPosition == 0
+                    ? null
+                    : () => setState(() {
+                          _position--;
+                          _showAnswer = false;
+                        }),
+                icon: const Icon(Icons.chevron_left_rounded),
+                label: const Text('Previous'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: selectedPosition >= dueIndexes.length - 1
+                    ? null
+                    : () => setState(() {
+                          _position++;
+                          _showAnswer = false;
+                        }),
+                icon: const Icon(Icons.chevron_right_rounded),
+                label: const Text('Next'),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => state.toggleDeckMastery(index),
+              icon: Icon(card.isMastered
+                  ? Icons.check_circle
+                  : Icons.circle_outlined),
+              label: Text(card.isMastered ? 'Mastered' : 'Mark mastered'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            _RatingButton(
+                label: 'Again', color: AppColors.pink, onPressed: () => _rate(state, index, ReviewRating.again)),
+            const SizedBox(width: 6),
+            _RatingButton(
+                label: 'Hard', color: AppColors.peach, onPressed: () => _rate(state, index, ReviewRating.hard)),
+            const SizedBox(width: 6),
+            _RatingButton(
+                label: 'Good', color: AppColors.teal, onPressed: () => _rate(state, index, ReviewRating.good)),
+            const SizedBox(width: 6),
+            _RatingButton(
+                label: 'Easy', color: AppColors.mauve, onPressed: () => _rate(state, index, ReviewRating.easy)),
+          ]),
+        ] else ...[
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => setState(() => _showAnswer = true),
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text('Show answer'),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Future<void> _rate(AppState state, int index, ReviewRating rating) async {
+    await state.reviewDeckCard(index, rating);
+    if (mounted) {
+      setState(() {
+        _showAnswer = false;
+        _position = 0;
+      });
+    }
+  }
+}
+
+class _RatingButton extends StatelessWidget {
+  const _RatingButton({
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: OutlinedButton(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(foregroundColor: color),
+          child: Text(label),
+        ),
+      );
 }
 
 class _DeckSelector extends StatelessWidget {
@@ -384,44 +494,3 @@ class _EmptyState extends StatelessWidget {
       );
 }
 
-class _Flashcard extends StatelessWidget {
-  const _Flashcard({required this.card, required this.index});
-  final Flashcard card;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(22),
-        constraints: const BoxConstraints(minHeight: 170),
-        decoration: BoxDecoration(
-          color: AppColors.mauve.withValues(alpha: .12),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.mauve.withValues(alpha: .4)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'CARD ${(index + 1).toString().padLeft(2, '0')}',
-              style: const TextStyle(
-                color: AppColors.mauve,
-                fontSize: 10,
-                letterSpacing: 1.4,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              card.front,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              card.back,
-              style: const TextStyle(color: AppColors.muted, fontSize: 13),
-            ),
-            const Spacer(),
-          ],
-        ),
-      );
-}

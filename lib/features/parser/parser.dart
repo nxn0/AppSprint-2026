@@ -363,6 +363,7 @@ class FlashcardParser {
     cards.addAll(_parseRegistryDefinitions(notes));
     cards.addAll(_parsePromptBlocks(notes));
     cards.addAll(_parseHeadingBlocks(notes));
+    cards.addAll(_parseNumberedHeadingBlocks(notes));
     cards.addAll(_parseDefinitionSentences(notes));
     cards.addAll(_parseSourceBackedPrompts(notes, source));
     final unique = <String, Flashcard>{};
@@ -423,9 +424,9 @@ class FlashcardParser {
       if (!LocalRegexRegistry.validTerm(term) || definition.length < 20) {
         continue;
       }
-      cards.add(Flashcard(
-          front: 'What is $term?',
-          back: _joinDefinitionContinuation(definition, notes, line)));
+        cards.add(Flashcard(
+            front: _questionForSubject(term),
+            back: _joinDefinitionContinuation(definition, notes, line)));
     }
     return cards;
   }
@@ -489,10 +490,10 @@ class FlashcardParser {
         if (continuation.isEmpty) continue;
         answerLines.add(continuation);
       }
-      cards.add(Flashcard(
-        front: 'What is $subject?',
-        back: answerLines.join(' '),
-      ));
+        cards.add(Flashcard(
+          front: _questionForSubject(subject),
+          back: answerLines.join(' '),
+        ));
     }
     return cards;
   }
@@ -515,6 +516,9 @@ class FlashcardParser {
 
   static String _cleanSubject(String subject) => subject
       .replaceFirst(RegExp(r'^(the|a|an)\s+', caseSensitive: false), '')
+      .replaceFirst(
+        RegExp(r'^(\S+)\s+(?:a|an|the)\s+\1$', caseSensitive: false),
+        r'\1')
       .trim();
 
   static bool _isValidSubject(String subject) =>
@@ -609,20 +613,75 @@ class FlashcardParser {
           _isExampleLine(line)) {
         continue;
       }
-      final match = RegExp(
-        r'^((?:[A-Z][A-Za-z0-9+.#()/_-]*\s+){0,5}[A-Z][A-Za-z0-9+.#()/_-]*)\s+(?:is|are|provides|works|allows|represents|creates|contains|supports|enables)\s+(.{35,})$',
-        caseSensitive: false,
-      ).firstMatch(line);
-      if (match == null) continue;
-      final subject = _cleanSubject(match.group(1) ?? '');
-      final answer = (match.group(2) ?? '').trim();
-      if (_isValidSubject(subject) && answer.length >= 25) {
-        cards.add(Flashcard(front: 'What is $subject?', back: answer));
+      final parsed = _DefinitionFsm.parse(line);
+      if (parsed != null &&
+          _isValidSubject(parsed.subject) &&
+          parsed.definition.length >= 25) {
+        cards.add(Flashcard(
+          front: _questionForSubject(parsed.subject),
+          back: _cleanDefinition(parsed.definition),
+        ));
       }
     }
     return cards;
   }
 
+  static List<Flashcard> _parseNumberedHeadingBlocks(String notes) {
+    final lines = _lines(notes);
+    final cards = <Flashcard>[];
+    final headingPattern =
+      RegExp(r'^\(?\d+\)?\s*([A-Za-z][\w+#./-]*)\s*:?$');
+    for (var index = 0; index < lines.length; index++) {
+      final match = headingPattern.firstMatch(lines[index]);
+      if (match == null) continue;
+      final subject = match.group(1)!.trim();
+      final answerLines = <String>[];
+      for (var next = index + 1;
+          next < lines.length && answerLines.length < 8;
+          next++) {
+        final line = lines[next];
+        if (line.isEmpty) continue;
+        if (headingPattern.hasMatch(line) ||
+            _looksLikeHeading(line) ||
+            _isExampleLine(line)) {
+          break;
+        }
+        answerLines.add(line);
+      }
+      final answer = _polishDefinition(
+        subject,
+        _cleanDefinition(answerLines.join(' ')),
+      );
+      if (_isValidSubject(subject) && answer.length >= 25) {
+        cards.add(Flashcard(
+          front: _questionForSubject(subject),
+          back: answer,
+        ));
+      }
+    }
+    return cards;
+  }
+
+  static String _questionForSubject(String subject) {
+    final value = subject.trim();
+    final needsArticle = RegExp(r'\b(class|interface|package)$',
+            caseSensitive: false)
+        .hasMatch(value);
+    return 'What is ${needsArticle ? 'the ' : ''}$value?';
+  }
+
+  static String _cleanDefinition(String definition) => definition
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp(r'\s+([,.;!?])'), r'\1')
+      .trim();
+
+  static String _polishDefinition(String subject, String definition) {
+    final objectPattern = RegExp(
+      '^the object of an? ${RegExp.escape(subject)} class is ',
+      caseSensitive: false,
+    );
+    return definition.replaceFirst(objectPattern, 'A $subject is ');
+  }
   static List<String> _lines(String notes) => notes
       .split(RegExp(r'\r?\n'))
       .map((line) => line
@@ -664,6 +723,7 @@ class FlashcardParser {
 
   static bool _isNextConcept(String line) =>
       _parseDefinitionLine(line) != null ||
+      RegExp(r'^\(?\d+\)?\s*[A-Za-z][\w+#./-]*\s*:?$').hasMatch(line) ||
       (_looksLikeHeading(line) && !_isExampleHeading(line)) ||
       (line.contains('?') && line.length >= 12);
 
@@ -698,11 +758,128 @@ class FlashcardParser {
   }
 }
 
+enum _DefinitionParserState {
+  seekingSubject,
+  collectingSubject,
+  collectingDefinition,
+}
+
+class _DefinitionMatch {
+  const _DefinitionMatch(this.subject, this.definition);
+
+  final String subject;
+  final String definition;
+}
+
+class _DefinitionFsm {
+  static const _noiseWords = {'the', 'a', 'an', 'also', 'basically'};
+  static const _singleWordCopulas = {
+    'is',
+    'are',
+    'means',
+    'denotes',
+    'describes',
+    'provides',
+    'works',
+    'allows',
+    'represents',
+    'creates',
+    'contains',
+    'supports',
+    'enables',
+  };
+
+  static _DefinitionMatch? parse(String line) {
+    final words = line.split(RegExp(r'\s+'));
+    var state = _DefinitionParserState.seekingSubject;
+    final subject = <String>[];
+    final definition = <String>[];
+
+    for (var index = 0; index < words.length; index++) {
+      final rawWord = words[index].trim();
+      if (rawWord.isEmpty) continue;
+      final word = _cleanWord(rawWord);
+      final lowerWord = word.toLowerCase();
+      if (word.isEmpty) continue;
+
+      switch (state) {
+        case _DefinitionParserState.seekingSubject:
+          if (_noiseWords.contains(lowerWord)) continue;
+          if (!_startsTechnicalTerm(word)) return null;
+          subject.add(word);
+          state = _DefinitionParserState.collectingSubject;
+        case _DefinitionParserState.collectingSubject:
+          if (subject.length == 1 && _noiseWords.contains(lowerWord)) {
+            continue;
+          }
+          if (subject.length == 1 &&
+              subject.first.toLowerCase() == lowerWord) {
+            continue;
+          }
+          final copulaLength = _copulaLength(words, index);
+          if (copulaLength > 0) {
+            index += copulaLength - 1;
+            state = _DefinitionParserState.collectingDefinition;
+          } else if (_endsSentence(rawWord) || subject.length >= 4) {
+            return null;
+          } else {
+            subject.add(word);
+          }
+        case _DefinitionParserState.collectingDefinition:
+          definition.add(rawWord);
+        }
+    }
+
+    if (state != _DefinitionParserState.collectingDefinition) return null;
+    final value = definition.join(' ').trim();
+    return value.isEmpty ? null : _DefinitionMatch(subject.join(' '), value);
+  }
+
+  static int _copulaLength(List<String> words, int index) {
+    final word = _cleanWord(words[index]).toLowerCase();
+    if (_singleWordCopulas.contains(word)) return 1;
+    final remaining = words.skip(index).take(4).map(_cleanWord).toList();
+    final phrase = remaining.join(' ').toLowerCase();
+    for (final candidate in const [
+      'is defined as',
+      'is known as',
+      'is described as',
+      'refers to',
+    ]) {
+      if (phrase.startsWith(candidate)) return candidate.split(' ').length;
+    }
+    return 0;
+  }
+
+    static String _cleanWord(String word) => word
+      .replaceAll(RegExp(r'^[\[({"]+'), '')
+      .replaceAll(RegExp(r'[\],;!?.)}"]+$'), '');
+
+  static bool _endsSentence(String word) =>
+      RegExp(r'[.!?;]$').hasMatch(word);
+
+  static bool _startsTechnicalTerm(String word) =>
+      word.isNotEmpty &&
+      (RegExp(r'[A-Z]').hasMatch(word[0]) ||
+          RegExp(r'^[A-Za-z][A-Za-z0-9+#.()/_-]*$').hasMatch(word));
+}
+
 class PdfTextExtractorService {
-  static Future<String> extract(Uint8List bytes) async {
+  static Future<String> extract(Uint8List bytes, {int maxPages = 5}) async {
     final document = PdfDocument(inputBytes: bytes);
     try {
-      return PdfTextExtractor(document).extractText();
+      final extractor = PdfTextExtractor(document);
+      final pagesToScan = document.pages.count < maxPages
+          ? document.pages.count
+          : maxPages;
+      final pages = <String>[];
+      for (var index = 0; index < pagesToScan; index++) {
+        pages.add(extractor.extractText(
+          startPageIndex: index,
+          endPageIndex: index,
+        ));
+      }
+      return pages.join('\n');
     } finally {
       document.dispose();
     }

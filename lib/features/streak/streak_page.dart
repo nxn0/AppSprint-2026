@@ -98,6 +98,8 @@ class _StreakPageState extends State<StreakPage> {
           onDelete: context.read<AppState>().deleteTodo,
         ),
         const SizedBox(height: 24),
+          _ActivitySummary(days: state.days),
+          const SizedBox(height: 24),
         _StreakBars(days: state.days),
         const SizedBox(height: 24),
         const Text(
@@ -228,22 +230,79 @@ class _TodoSection extends StatelessWidget {
               ),
             )
           else
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Column(
-                children: todos
-                    .map(
-                      (todo) => _TodoRow(
-                        todo: todo,
-                        onToggle: onToggle,
-                        onDelete: onDelete,
-                      ),
-                    )
-                    .toList(),
+            Column(children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 4),
+                child: LinearProgressIndicator(
+                  value: todos.where((todo) => todo.isDone).length / todos.length,
+                  minHeight: 6,
+                  backgroundColor: AppColors.mantle,
+                  color: AppColors.teal,
+                ),
               ),
-            ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${todos.where((todo) => todo.isDone).length}/${todos.length} complete',
+                  style: const TextStyle(color: AppColors.muted, fontSize: 11),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  children: todos
+                      .map((todo) => _TodoRow(
+                            todo: todo,
+                            onToggle: onToggle,
+                            onDelete: onDelete,
+                          ))
+                      .toList(),
+                ),
+              ),
+            ]),
         ],
       );
+}
+
+class _ActivitySummary extends StatelessWidget {
+  const _ActivitySummary({required this.days});
+
+  final List<StudyDay> days;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final periods = <String, int>{
+      'WEEK': _minutesSince(now.subtract(const Duration(days: 6))),
+      'MONTH': _minutesSince(DateTime(now.year, now.month, 1)),
+      'YEAR': _minutesSince(DateTime(now.year, 1, 1)),
+    };
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('ACTIVITY WINDOWS',
+          style: TextStyle(
+              color: AppColors.muted,
+              fontSize: 11,
+              letterSpacing: 1.4,
+              fontWeight: FontWeight.bold)),
+      const SizedBox(height: 10),
+      Row(children: [
+        for (final entry in periods.entries) ...[
+          if (entry.key != periods.keys.first) const SizedBox(width: 8),
+          Expanded(
+            child: _StatBlock(
+              label: entry.key,
+              value: '${entry.value}m',
+              color: AppColors.teal,
+            ),
+          ),
+        ],
+      ]),
+    ]);
+  }
+
+  int _minutesSince(DateTime start) => days
+      .where((day) => !day.date.isBefore(start))
+      .fold(0, (sum, day) => sum + day.minutes);
 }
 
 class _TodoRow extends StatelessWidget {
@@ -316,7 +375,7 @@ class _StreakBars extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(children: [
-          _BarLegend(label: 'STREAK', color: AppColors.peach),
+          const _BarLegend(label: 'STREAK', color: AppColors.peach),
           const SizedBox(height: 10),
           for (var index = 0; index < recent.length; index++)
             _DayBar(
@@ -327,7 +386,7 @@ class _StreakBars extends StatelessWidget {
               color: AppColors.peach,
             ),
           const SizedBox(height: 14),
-          _BarLegend(label: 'STUDY GAINS', color: AppColors.teal),
+          const _BarLegend(label: 'STUDY GAINS', color: AppColors.teal),
           const SizedBox(height: 10),
           for (var index = 0; index < recent.length; index++)
             _DayBar(

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../core/constants.dart';
-import '../focus/app_state.dart';
 import '../focus/focus_page.dart';
 import '../cards/cards_page.dart';
 import '../streak/streak_page.dart';

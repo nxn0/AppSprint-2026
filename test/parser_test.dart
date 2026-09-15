@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pomly/services.dart';
+import 'package:pomly/data/models.dart';
 
 void main() {
   test('parses supported local flashcard formats', () {
@@ -41,6 +42,37 @@ Encapsulation refers to bundling data and methods inside one class.
     expect(cards[1].front, 'What is Polymorphism?');
     expect(cards[1].back, contains('many forms'));
     expect(cards[2].front, 'What is Encapsulation?');
+  });
+
+  test('captures compound technical subjects with the definition FSM', () {
+    final cards = FlashcardParser.parse('''
+The TextField class is a text component that allows the editing of a single line text.
+''');
+
+    expect(cards, hasLength(1));
+    expect(cards.single.front, 'What is the TextField class?');
+    expect(cards.single.back, contains('allows the editing'));
+  });
+
+  test('generates grammatical cards from the Swing benchmark PDF text', () {
+    final cards = FlashcardParser.parse('''
+JLabel A JLabel is an object component for placing text in a container.
+(3)JTextField:
+The object of a JTextField class is a text component that allows the editing of a single line text.
+(4)JTextArea
+The object of a JTextArea class is a multi line region that displays text.
+''');
+
+    expect(cards.any((card) => card.front == 'What is JLabel?'), isTrue);
+    expect(cards.any((card) => card.front == 'What is JTextField?'), isTrue);
+    expect(cards.any((card) => card.front == 'What is JTextArea?'), isTrue);
+    expect(cards.every((card) => !card.front.contains(' A JLabel')), isTrue);
+    expect(
+      cards
+          .singleWhere((card) => card.front == 'What is JTextField?')
+          .back,
+      startsWith('A JTextField is a text component'),
+    );
   });
 
   test('extracts cards from Swing-style headings and explanations', () {
@@ -95,5 +127,29 @@ Process synchronization is a mechanism that coordinates concurrent processes.
     expect(definition.back, contains('coordinates concurrent processes'));
     expect(unknown.needsSource, isTrue);
     expect(unknown.back, isEmpty);
+  });
+
+  test('schedules cards with Anki-style review intervals', () {
+    final now = DateTime(2026, 9, 15, 12);
+    const card = Flashcard(front: 'What is Dart?', back: 'A language.');
+
+    expect(card.isDue(now), isTrue);
+
+    final firstGood = card.scheduled(ReviewRating.good, now: now);
+    expect(firstGood.intervalDays, 1);
+    expect(firstGood.repetitions, 1);
+    expect(firstGood.dueAt, now.add(const Duration(days: 1)));
+
+    final secondGood = firstGood.scheduled(ReviewRating.good, now: now);
+    expect(secondGood.intervalDays, 3);
+
+    final again = secondGood.scheduled(ReviewRating.again, now: now);
+    expect(again.repetitions, 0);
+    expect(again.lapses, 1);
+    expect(again.dueAt, now.add(const Duration(minutes: 10)));
+
+    final easy = card.scheduled(ReviewRating.easy, now: now);
+    expect(easy.intervalDays, 4);
+    expect(easy.ease, greaterThan(card.ease));
   });
 }
