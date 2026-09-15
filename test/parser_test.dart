@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pulse_mesh/services.dart';
+import 'package:pomly/services.dart';
 
 void main() {
   test('parses supported local flashcard formats', () {
@@ -73,5 +73,27 @@ The JButton class creates a labeled button that produces an action when pushed.
     ).join('\n');
     expect(FlashcardParser.parse(notes, maxCards: 30), hasLength(30));
     expect(FlashcardParser.parse(notes, maxCards: 70), hasLength(70));
+  });
+
+  test('synthesizes only answers backed by the imported source', () {
+    final index = StudyKnowledgeIndex()..addNotes('''
+FCFS (First Come First Served)
+
+Process synchronization is a mechanism that coordinates concurrent processes.
+''', 'os-notes.pdf');
+    final synth = StudyAnswerSynth(index);
+
+    final expansion = synth.build(
+        StudyIntentParser.parse('Write the expansion of FCFS'), 'paper.pdf');
+    final definition = synth.build(
+        StudyIntentParser.parse('Define process synchronization'), 'paper.pdf');
+    final unknown = synth.build(
+        StudyIntentParser.parse('Define deadlock prevention'), 'paper.pdf');
+
+    expect(expansion.front, 'What does FCFS stand for?');
+    expect(expansion.back, contains('First Come First Served'));
+    expect(definition.back, contains('coordinates concurrent processes'));
+    expect(unknown.needsSource, isTrue);
+    expect(unknown.back, isEmpty);
   });
 }

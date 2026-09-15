@@ -9,19 +9,18 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await LocalStore.open();
   runApp(ChangeNotifierProvider(
-      create: (_) => AppState(store)..initialize(),
-      child: const PulseMeshApp()));
+      create: (_) => AppState(store)..initialize(), child: const PomlyApp()));
 }
 
-class PulseMeshApp extends StatelessWidget {
-  const PulseMeshApp({super.key});
+class PomlyApp extends StatelessWidget {
+  const PomlyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     const text = Color(0xffcdd6f4);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Pulse Mesh',
+      title: 'Pomly',
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xff1e1e2e),

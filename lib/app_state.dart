@@ -10,11 +10,11 @@ class AppState extends ChangeNotifier {
   AppState(this.store);
 
   final LocalStore store;
-  final PresenceService presence = PresenceService();
   String moniker = '';
   List<Flashcard> cards = [];
+  List<FlashcardDeck> decks = [];
+  String? selectedDeckId;
   List<StudyDay> days = [];
-  bool isOnline = true;
   bool isRunning = false;
   bool isBreak = false;
   bool isLongBreak = false;
@@ -27,14 +27,23 @@ class AppState extends ChangeNotifier {
     moniker = store.moniker ?? _makeMoniker();
     await store.saveMoniker(moniker);
     cards = store.cards;
+    decks = store.decks;
+    if (decks.isEmpty && cards.isNotEmpty) {
+      decks = [
+        FlashcardDeck(
+          id: 'legacy-${DateTime.now().millisecondsSinceEpoch}',
+          title: 'Imported cards',
+          cards: cards,
+          createdAt: DateTime.now(),
+          sourceName: 'Previous local cards',
+        ),
+      ];
+      await store.saveDecks(decks);
+    }
+    selectedDeckId = decks.firstOrNull?.id;
     days = store.days;
     completedSessions = store.completedSessions;
     totalFocusMinutes = store.totalFocusMinutes;
-    notifyListeners();
-  }
-
-  void toggleOnline() {
-    isOnline = !isOnline;
     notifyListeners();
   }
 
@@ -159,6 +168,53 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> addDeck({
+    required String title,
+    required List<Flashcard> parsed,
+    String? sourceName,
+  }) async {
+    if (parsed.isEmpty) return;
+    final deck = FlashcardDeck(
+      id: '${DateTime.now().microsecondsSinceEpoch}',
+      title: title,
+      cards: parsed,
+      createdAt: DateTime.now(),
+      sourceName: sourceName,
+    );
+    decks = [...decks, deck];
+    selectedDeckId = deck.id;
+    await store.saveDecks(decks);
+    notifyListeners();
+  }
+
+  Future<void> deleteDeck(String deckId) async {
+    decks = decks.where((deck) => deck.id != deckId).toList();
+    if (selectedDeckId == deckId) {
+      selectedDeckId = decks.firstOrNull?.id;
+    }
+    await store.saveDecks(decks);
+    notifyListeners();
+  }
+
+  void selectDeck(String deckId) {
+    selectedDeckId = deckId;
+    notifyListeners();
+  }
+
+  FlashcardDeck? get selectedDeck =>
+      decks.where((deck) => deck.id == selectedDeckId).firstOrNull;
+
+  Future<void> toggleDeckMastery(int index) async {
+    final deck = selectedDeck;
+    if (deck == null || index < 0 || index >= deck.cards.length) return;
+    final updatedCards = [...deck.cards]..[index] =
+        deck.cards[index].copyWith(isMastered: !deck.cards[index].isMastered);
+    final updated = deck.copyWith(cards: updatedCards);
+    decks = decks.map((item) => item.id == deck.id ? updated : item).toList();
+    await store.saveDecks(decks);
+    notifyListeners();
+  }
+
   Future<void> toggleMastery(int index) async {
     cards = [...cards]..[index] =
         cards[index].copyWith(isMastered: !cards[index].isMastered);
@@ -171,7 +227,6 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
-    presence.dispose();
     super.dispose();
   }
 }

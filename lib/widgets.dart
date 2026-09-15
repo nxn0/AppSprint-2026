@@ -26,12 +26,7 @@ class FocusPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
       children: [
-        Row(children: [
-          const Expanded(child: _BrandHeader()),
-          _OnlineChip(
-              online: state.isOnline,
-              onTap: () => context.read<AppState>().toggleOnline()),
-        ]),
+        const _BrandHeader(),
         const SizedBox(height: 26),
         Text('Good focus, ${state.moniker}',
             style: Theme.of(context).textTheme.titleLarge),
@@ -39,8 +34,6 @@ class FocusPage extends StatelessWidget {
         const Text('A quiet room for your next useful hour.',
             style: TextStyle(color: _muted)),
         const SizedBox(height: 24),
-        const _PresenceCard(),
-        const SizedBox(height: 18),
         _TimerCard(state: state),
         const SizedBox(height: 18),
         Row(children: [
@@ -78,7 +71,7 @@ class _BrandHeader extends StatelessWidget {
           child: const Icon(Icons.blur_on_rounded, color: _mauve, size: 21),
         ),
         const SizedBox(width: 10),
-        const Text('PULSE MESH',
+        const Text('POMLY',
             style: TextStyle(
                 color: _mauve,
                 fontWeight: FontWeight.w800,
@@ -87,115 +80,48 @@ class _BrandHeader extends StatelessWidget {
       ]);
 }
 
-class _OnlineChip extends StatelessWidget {
-  const _OnlineChip({required this.online, required this.onTap});
-  final bool online;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-              color: _surface, borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-            child: Row(children: [
-              Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                      color: online ? _teal : _muted, shape: BoxShape.circle)),
-              const SizedBox(width: 7),
-              Text(online ? 'MESH LIVE' : 'OFFLINE',
-                  style: const TextStyle(
-                      color: _muted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: .7)),
-            ]),
-          ),
-        ),
-      );
-}
+class _DeckSelector extends StatelessWidget {
+  const _DeckSelector({
+    required this.state,
+    required this.onChanged,
+    required this.onDeleted,
+  });
 
-class _PresenceCard extends StatelessWidget {
-  const _PresenceCard();
+  final AppState state;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onDeleted;
+
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
-    return Container(
-      height: 190,
-      decoration: BoxDecoration(
-          color: _mantle,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: _surface)),
-      child: Stack(children: [
-        StreamBuilder<List<PresencePoint>>(
-          stream: state.presence.stream,
-          initialData: const [],
-          builder: (_, snapshot) => CustomPaint(
-              painter: RadarPainter(snapshot.data ?? const []),
-              size: Size.infinite),
-        ),
-        Positioned.fill(
-            child:
-                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.radar_rounded, color: _mauve, size: 20),
-          const SizedBox(height: 5),
-          Text('${state.presence.activeCount} focused nearby',
-              style: const TextStyle(color: _muted, fontSize: 12)),
-          const SizedBox(height: 3),
-          const Text('anonymous presence mesh',
-              style: TextStyle(color: Color(0xff6c7086), fontSize: 10)),
-        ])),
-        const Positioned(
-            left: 16,
-            top: 15,
-            child: Text('PRESENCE',
-                style: TextStyle(
-                    color: _muted,
-                    fontSize: 10,
-                    letterSpacing: 1.5,
-                    fontWeight: FontWeight.bold))),
-      ]),
-    );
+    final selectedId = state.selectedDeckId;
+    final value = state.decks.any((deck) => deck.id == selectedId)
+        ? selectedId
+        : state.decks.first.id;
+    return Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Expanded(
+          child: DropdownButtonFormField<String>(
+              initialValue: value,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                  labelText: 'NOTEBOOK',
+                  prefixIcon: Icon(Icons.menu_book_outlined)),
+              items: [
+                for (var index = 0; index < state.decks.length; index++)
+                  DropdownMenuItem<String>(
+                      value: state.decks[index].id,
+                      child: Text('${index + 1}. ${state.decks[index].title}',
+                          overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (deckId) {
+                if (deckId != null) onChanged(deckId);
+              })),
+      const SizedBox(width: 8),
+      IconButton.filledTonal(
+          onPressed: () => onDeleted(value!),
+          icon: const Icon(Icons.delete_outline_rounded),
+          tooltip: 'Delete notebook'),
+    ]);
   }
-}
-
-class RadarPainter extends CustomPainter {
-  RadarPainter(this.points);
-  final List<PresencePoint> points;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = min(size.width, size.height) * .38;
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = _surface.withValues(alpha: .9);
-    for (final scale in [.35, .67, 1.0]) {
-      canvas.drawCircle(center, radius * scale, ring);
-    }
-    canvas.drawLine(Offset(center.dx - radius, center.dy),
-        Offset(center.dx + radius, center.dy), ring);
-    canvas.drawLine(Offset(center.dx, center.dy - radius),
-        Offset(center.dx, center.dy + radius), ring);
-    for (var index = 0; index < points.length; index++) {
-      final point = points[index];
-      final offset = center + Offset(point.x * radius, point.y * radius);
-      final color = [_mauve, _pink, _peach, _teal][index % 4];
-      canvas.drawCircle(
-          offset, 10, Paint()..color = color.withValues(alpha: .07));
-      canvas.drawCircle(
-          offset, 3.5, Paint()..color = color.withValues(alpha: point.opacity));
-    }
-    canvas.drawCircle(center, 5, Paint()..color = _mauve);
-    canvas.drawCircle(
-        center, 12, Paint()..color = _mauve.withValues(alpha: .12));
-  }
-
-  @override
-  bool shouldRepaint(covariant RadarPainter oldDelegate) => true;
 }
 
 class _TimerCard extends StatelessWidget {
@@ -330,15 +256,28 @@ class _CardsPageState extends State<CardsPage> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final deck = state.selectedDeck;
+    final activeIndex = deck == null || deck.cards.isEmpty
+        ? 0
+        : min(_active, deck.cards.length - 1);
     return ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
         children: [
-          const Text('Flashcards',
+          const Text('Study library',
               style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold)),
           const SizedBox(height: 5),
-          const Text('Turn rough notes into a small recall loop.',
+          const Text('Each import stays in its own notebook.',
               style: TextStyle(color: _muted)),
           const SizedBox(height: 22),
+          if (state.decks.isNotEmpty)
+            _DeckSelector(
+                state: state,
+                onDeleted: _confirmDeleteDeck,
+                onChanged: (deckId) {
+                  context.read<AppState>().selectDeck(deckId);
+                  setState(() => _active = 0);
+                }),
+          if (state.decks.isNotEmpty) const SizedBox(height: 18),
           Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -391,8 +330,11 @@ class _CardsPageState extends State<CardsPage> {
                         child: FilledButton.icon(
                             onPressed: () async {
                               final parsed = FlashcardParser.parse(_notes.text,
-                                  maxCards: _cardLimit);
-                              await context.read<AppState>().addCards(parsed);
+                                  maxCards: _cardLimit, source: 'Pasted notes');
+                              await context.read<AppState>().addDeck(
+                                  title: 'Notes ${state.decks.length + 1}',
+                                  parsed: parsed,
+                                  sourceName: 'Pasted notes');
                               _notes.clear();
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -419,7 +361,7 @@ class _CardsPageState extends State<CardsPage> {
                                 : 'Import PDF locally'))),
                   ])),
           const SizedBox(height: 24),
-          if (state.cards.isEmpty)
+          if (deck == null || deck.cards.isEmpty)
             const _EmptyState()
           else ...[
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -429,24 +371,41 @@ class _CardsPageState extends State<CardsPage> {
                       fontSize: 11,
                       letterSpacing: 1.4,
                       fontWeight: FontWeight.bold)),
-              Text('${state.cards.length} cards',
+              Text('${deck.cards.length} cards',
                   style: const TextStyle(color: _muted, fontSize: 11))
             ]),
             const SizedBox(height: 12),
-            GestureDetector(
-                onTap: () => setState(
-                    () => _active = (_active + 1) % state.cards.length),
-                child: _Flashcard(card: state.cards[_active], index: _active)),
+            _Flashcard(card: deck.cards[activeIndex], index: activeIndex),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-                onPressed: () =>
-                    context.read<AppState>().toggleMastery(_active),
-                icon: Icon(state.cards[_active].isMastered
-                    ? Icons.check_circle
-                    : Icons.circle_outlined),
-                label: Text(state.cards[_active].isMastered
-                    ? 'Mastered'
-                    : 'Mark mastered')),
+            Row(children: [
+              Expanded(
+                  child: OutlinedButton.icon(
+                      onPressed: activeIndex == 0
+                          ? null
+                          : () => setState(() => _active = activeIndex - 1),
+                      icon: const Icon(Icons.chevron_left_rounded),
+                      label: const Text('Previous'))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: OutlinedButton.icon(
+                      onPressed: activeIndex >= deck.cards.length - 1
+                          ? null
+                          : () => setState(() => _active = activeIndex + 1),
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      label: const Text('Next'))),
+            ]),
+            const SizedBox(height: 10),
+            SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                    onPressed: () =>
+                        context.read<AppState>().toggleDeckMastery(activeIndex),
+                    icon: Icon(deck.cards[activeIndex].isMastered
+                        ? Icons.check_circle
+                        : Icons.circle_outlined),
+                    label: Text(deck.cards[activeIndex].isMastered
+                        ? 'Mastered'
+                        : 'Mark mastered'))),
           ],
         ]);
   }
@@ -464,8 +423,15 @@ class _CardsPageState extends State<CardsPage> {
     final appState = context.read<AppState>();
     try {
       final text = await PdfTextExtractorService.extract(bytes);
-      final parsed = FlashcardParser.parse(text, maxCards: _cardLimit);
-      await appState.addCards(parsed);
+      final parsed = FlashcardParser.parse(text,
+          maxCards: _cardLimit, source: result.files.single.name);
+      final sourceName = result.files.single.name;
+      final title =
+          sourceName.replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '');
+      await appState.addDeck(
+          title: title.isEmpty ? 'PDF ${appState.decks.length + 1}' : title,
+          parsed: parsed,
+          sourceName: sourceName);
       if (!mounted) return;
       _showMessage(parsed.isEmpty
           ? 'No selectable question and answer pairs found.'
@@ -480,6 +446,34 @@ class _CardsPageState extends State<CardsPage> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _confirmDeleteDeck(String deckId) async {
+    final deck = context
+        .read<AppState>()
+        .decks
+        .where((item) => item.id == deckId)
+        .firstOrNull;
+    if (deck == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete ${deck.title}?'),
+        content: const Text('This removes the local notebook and its cards.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await context.read<AppState>().deleteDeck(deckId);
+      setState(() => _active = 0);
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-package com.example.pulse_mesh
+package com.example.pomly
 
 import io.flutter.embedding.android.FlutterActivity
 
