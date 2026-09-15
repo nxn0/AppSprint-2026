@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/local_store.dart';
 import '../../data/models.dart';
+import '../../services/local_flashcard_engine.dart';
 
 class AppState extends ChangeNotifier {
   AppState(this.store);
@@ -30,12 +31,28 @@ class AppState extends ChangeNotifier {
     await store.saveMoniker(moniker);
     cards = store.cards;
     decks = store.decks;
+    final cleanedDecks = decks
+        .map((deck) => deck.copyWith(
+              cards:
+                  deck.cards.where(LocalFlashcardEngine.isReviewable).toList(),
+            ))
+        .where((deck) => deck.cards.isNotEmpty)
+        .toList();
+    if (cleanedDecks.length != decks.length ||
+        cleanedDecks.any((deck) =>
+            deck.cards.length !=
+            decks.firstWhere((item) => item.id == deck.id).cards.length)) {
+      decks = cleanedDecks;
+      await store.saveDecks(decks);
+    }
     if (decks.isEmpty && cards.isNotEmpty) {
+      final legacyCards =
+          cards.where(LocalFlashcardEngine.isReviewable).toList();
       decks = [
         FlashcardDeck(
           id: 'legacy-${DateTime.now().millisecondsSinceEpoch}',
           title: 'Imported cards',
-          cards: cards,
+          cards: legacyCards,
           createdAt: DateTime.now(),
           sourceName: 'Previous local cards',
         ),
@@ -47,6 +64,11 @@ class AppState extends ChangeNotifier {
     todos = store.todos;
     completedSessions = store.completedSessions;
     totalFocusMinutes = store.totalFocusMinutes;
+    final loggedMinutes = days.fold<int>(0, (sum, day) => sum + day.minutes);
+    if (loggedMinutes > totalFocusMinutes) {
+      totalFocusMinutes = loggedMinutes;
+      await store.saveTotalFocusMinutes(totalFocusMinutes);
+    }
     notifyListeners();
   }
 
@@ -54,9 +76,13 @@ class AppState extends ChangeNotifier {
 
   int get streak {
     final activeDates = days
-      .where((day) => day.minutes > 0 || day.reviews > 0 || day.completedTodos > 0)
+        .where((day) =>
+            day.minutes > 0 || day.reviews > 0 || day.completedTodos > 0)
         .map((day) => _dateKey(day.date))
         .toSet();
+    if (totalFocusMinutes > 0) {
+      activeDates.add(_dateKey(DateTime.now()));
+    }
     var cursor = DateTime.now();
     var count = 0;
     var idleDays = 0;
@@ -88,6 +114,14 @@ class AppState extends ChangeNotifier {
   }
 
   void _tick() {
+    if (!isBreak) {
+      _focusElapsedSeconds++;
+      if (_focusElapsedSeconds % 60 == 0) {
+        totalFocusMinutes++;
+        unawaited(logActivity(minutes: 1));
+        unawaited(store.saveTotalFocusMinutes(totalFocusMinutes));
+      }
+    }
     if (remaining.inSeconds <= 1) {
       if (isBreak) {
         if (isLongBreak) {
@@ -103,6 +137,7 @@ class AppState extends ChangeNotifier {
       } else {
         completedSessions++;
         unawaited(store.saveCompletedSessions(completedSessions));
+        _focusElapsedSeconds = 0;
         isBreak = true;
         isLongBreak = completedSessions % 5 == 0;
         remaining = isLongBreak
@@ -114,14 +149,6 @@ class AppState extends ChangeNotifier {
       }
     } else {
       remaining -= const Duration(seconds: 1);
-        if (!isBreak) {
-          _focusElapsedSeconds++;
-          if (_focusElapsedSeconds % 60 == 0) {
-            totalFocusMinutes++;
-            unawaited(logActivity(minutes: 1));
-            unawaited(store.saveTotalFocusMinutes(totalFocusMinutes));
-          }
-        }
     }
     notifyListeners();
   }
@@ -169,26 +196,25 @@ class AppState extends ChangeNotifier {
       ...todos,
       TodoItem(id: '${DateTime.now().microsecondsSinceEpoch}', title: trimmed),
     ];
+    await logActivity(createdTodos: 1);
     await store.saveTodos(todos);
-    notifyListeners();
   }
 
   Future<void> toggleTodo(String todoId) async {
-    final wasDone = todos.where((todo) => todo.id == todoId).firstOrNull?.isDone ?? false;
+    final wasDone =
+        todos.where((todo) => todo.id == todoId).firstOrNull?.isDone ?? false;
     todos = todos
-        .map((todo) => todo.id == todoId
-            ? todo.copyWith(isDone: !todo.isDone)
-            : todo)
+        .map((todo) =>
+            todo.id == todoId ? todo.copyWith(isDone: !todo.isDone) : todo)
         .toList();
+    await logActivity(completedTodos: wasDone ? -1 : 1);
     await store.saveTodos(todos);
-    if (!wasDone) await logActivity(completedTodos: 1);
-    notifyListeners();
   }
 
   Future<void> deleteTodo(String todoId) async {
     todos = todos.where((todo) => todo.id != todoId).toList();
-    await store.saveTodos(todos);
     notifyListeners();
+    await store.saveTodos(todos);
   }
 
   Future<void> addDeck({
@@ -233,24 +259,37 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now();
     return [
       for (var index = 0; index < deck.cards.length; index++)
-        if (deck.cards[index].isDue(now)) index,
+        if (LocalFlashcardEngine.isReviewable(deck.cards[index]) &&
+            !deck.cards[index].isMastered &&
+            deck.cards[index].isDue(now))
+          index,
     ];
   }
 
   Future<void> reviewDeckCard(int index, ReviewRating rating) async {
     final deck = selectedDeck;
     if (deck == null || index < 0 || index >= deck.cards.length) return;
-    final updatedCards = [...deck.cards]
-      ..[index] = deck.cards[index].scheduled(rating);
+    final updatedCards = [...deck.cards]..[index] =
+        deck.cards[index].scheduled(rating);
     final updated = deck.copyWith(cards: updatedCards);
     decks = decks.map((item) => item.id == deck.id ? updated : item).toList();
+    notifyListeners();
     await store.saveDecks(decks);
     await logActivity(reviews: 1);
-    notifyListeners();
   }
 
-  Future<void> logActivity({int minutes = 0, int reviews = 0, int completedTodos = 0}) async {
-    if (minutes == 0 && reviews == 0 && completedTodos == 0) return;
+  Future<void> logActivity({
+    int minutes = 0,
+    int reviews = 0,
+    int createdTodos = 0,
+    int completedTodos = 0,
+  }) async {
+    if (minutes == 0 &&
+        reviews == 0 &&
+        createdTodos == 0 &&
+        completedTodos == 0) {
+      return;
+    }
     final today = DateTime.now();
     final key = _dateKey(today);
     final index = days.indexWhere((day) => _dateKey(day.date) == key);
@@ -259,23 +298,25 @@ class AppState extends ChangeNotifier {
       date: today,
       minutes: current.minutes + minutes,
       reviews: current.reviews + reviews,
+      createdTodos: current.createdTodos + createdTodos,
       completedTodos: current.completedTodos + completedTodos,
     );
-    days = index == -1 ? [...days, updated] : [...days]..[index] = updated;
+    days = index == -1 ? [...days, updated] : [...days]
+      ..[index] = updated;
+    notifyListeners();
     await store.saveDays(days);
   }
 
   Future<void> toggleDeckMastery(int index) async {
     final deck = selectedDeck;
     if (deck == null || index < 0 || index >= deck.cards.length) return;
-    final updatedCards = [...deck.cards]
-      ..[index] = deck.cards[index].copyWith(
+    final updatedCards = [...deck.cards]..[index] = deck.cards[index].copyWith(
         isMastered: !deck.cards[index].isMastered,
       );
     final updated = deck.copyWith(cards: updatedCards);
     decks = decks.map((item) => item.id == deck.id ? updated : item).toList();
-    await store.saveDecks(decks);
     notifyListeners();
+    await store.saveDecks(decks);
   }
 
   Future<void> toggleMastery(int index) async {
@@ -306,8 +347,7 @@ class AdaptivePlan {
     final fatigueRatio = (studyMinutes / 240).clamp(0.0, 1.0);
     final base = 15 + (fatigueRatio * 15).round();
     return Duration(
-      minutes:
-          completedSessions > 0 && completedSessions % 5 == 0 ? base : 0,
+      minutes: completedSessions > 0 && completedSessions % 5 == 0 ? base : 0,
     );
   }
 }

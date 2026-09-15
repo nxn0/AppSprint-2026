@@ -26,9 +26,10 @@ class _StreakPageState extends State<StreakPage> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final active = state.days
+    final loggedDays = state.days
         .where((day) => day.minutes > 0)
         .fold<int>(0, (sum, day) => sum + day.minutes);
+    final active = max(loggedDays, state.totalFocusMinutes);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
       children: [
@@ -98,9 +99,11 @@ class _StreakPageState extends State<StreakPage> {
           onDelete: context.read<AppState>().deleteTodo,
         ),
         const SizedBox(height: 24),
-          _ActivitySummary(days: state.days),
-          const SizedBox(height: 24),
-        _StreakBars(days: state.days),
+        _ActivitySummary(
+          days: state.days,
+          todos: state.todos,
+          liveFocusMinutes: state.totalFocusMinutes,
+        ),
         const SizedBox(height: 24),
         const Text(
           'GRACE LOGIC',
@@ -234,7 +237,8 @@ class _TodoSection extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 12, bottom: 4),
                 child: LinearProgressIndicator(
-                  value: todos.where((todo) => todo.isDone).length / todos.length,
+                  value:
+                      todos.where((todo) => todo.isDone).length / todos.length,
                   minHeight: 6,
                   backgroundColor: AppColors.mantle,
                   color: AppColors.teal,
@@ -265,18 +269,33 @@ class _TodoSection extends StatelessWidget {
 }
 
 class _ActivitySummary extends StatelessWidget {
-  const _ActivitySummary({required this.days});
+  const _ActivitySummary({
+    required this.days,
+    required this.todos,
+    required this.liveFocusMinutes,
+  });
 
   final List<StudyDay> days;
+  final List<TodoItem> todos;
+  final int liveFocusMinutes;
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final periods = <String, int>{
-      'WEEK': _minutesSince(now.subtract(const Duration(days: 6))),
-      'MONTH': _minutesSince(DateTime(now.year, now.month, 1)),
-      'YEAR': _minutesSince(DateTime(now.year, 1, 1)),
-    };
+    final periods = <(String, DateTime)>[
+      ('WEEK', DateTime(now.year, now.month, now.day - now.weekday + 1)),
+      ('MONTH', DateTime(now.year, now.month, 1)),
+      ('YEAR', DateTime(now.year, 1, 1)),
+    ];
+    final minutes = <int>[
+      for (final period in periods) _minutesSince(period.$2),
+    ];
+    final todoTotals = <(int, int)>[
+      for (final period in periods) _todosSince(period.$2),
+    ];
+    final minutePeak = max(1, minutes.fold<int>(0, max));
+    final todoPeak =
+        max(1, todoTotals.fold<int>(0, (peak, value) => max(peak, value.$1)));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('ACTIVITY WINDOWS',
           style: TextStyle(
@@ -285,24 +304,189 @@ class _ActivitySummary extends StatelessWidget {
               letterSpacing: 1.4,
               fontWeight: FontWeight.bold)),
       const SizedBox(height: 10),
-      Row(children: [
-        for (final entry in periods.entries) ...[
-          if (entry.key != periods.keys.first) const SizedBox(width: 8),
-          Expanded(
-            child: _StatBlock(
-              label: entry.key,
-              value: '${entry.value}m',
-              color: AppColors.teal,
+      _ActivityBarGroup(
+        title: 'MINUTES STUDIED',
+        periods: periods,
+        values: minutes,
+        peak: minutePeak,
+        color: AppColors.teal,
+        valueLabel: (index) => '${minutes[index]}m',
+      ),
+      const SizedBox(height: 10),
+      _ActivityBarGroup(
+        title: 'TODO PROGRESS',
+        periods: periods,
+        values: <int>[for (final value in todoTotals) value.$1],
+        peak: todoPeak,
+        valueLabel: (index) =>
+            '${todoTotals[index].$2}/${todoTotals[index].$1}',
+        segments: <({int pending, int done})>[
+          for (final value in todoTotals)
+            (
+              pending: max(0, value.$1 - value.$2),
+              done: value.$2,
             ),
-          ),
         ],
-      ]),
+      ),
     ]);
   }
 
-  int _minutesSince(DateTime start) => days
-      .where((day) => !day.date.isBefore(start))
-      .fold(0, (sum, day) => sum + day.minutes);
+  int _minutesSince(DateTime start) {
+    final logged = days
+        .where((day) => !day.date.isBefore(start))
+        .fold(0, (sum, day) => sum + day.minutes);
+    final today = DateTime.now();
+    return today.isBefore(start) ? logged : max(logged, liveFocusMinutes);
+  }
+
+  (int, int) _todosSince(DateTime start) {
+    final today = DateTime.now();
+    final logged = days
+        .where((day) =>
+            !day.date.isBefore(start) &&
+            !(day.date.year == today.year &&
+                day.date.month == today.month &&
+                day.date.day == today.day))
+        .fold((
+      0,
+      0
+    ), (sum, day) => (sum.$1 + day.createdTodos, sum.$2 + day.completedTodos));
+    if (today.isBefore(start)) return logged;
+    final done = todos.where((todo) => todo.isDone).length;
+    return (logged.$1 + todos.length, logged.$2 + done);
+  }
+}
+
+class _ActivityBarGroup extends StatelessWidget {
+  const _ActivityBarGroup({
+    required this.title,
+    required this.periods,
+    required this.values,
+    required this.peak,
+    required this.valueLabel,
+    this.color,
+    this.segments,
+  });
+
+  final String title;
+  final List<(String, DateTime)> periods;
+  final List<int> values;
+  final int peak;
+  final String Function(int index) valueLabel;
+  final Color? color;
+  final List<({int pending, int done})>? segments;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(children: [
+          Row(children: [
+            Text(title,
+                style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 9,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.bold)),
+            if (segments != null) ...[
+              const Spacer(),
+              const _ActivityLegend(color: AppColors.pink, label: 'pending'),
+              const SizedBox(width: 8),
+              const _ActivityLegend(color: AppColors.teal, label: 'done'),
+            ],
+          ]),
+          const SizedBox(height: 5),
+          for (var index = 0; index < periods.length; index++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                SizedBox(
+                  width: 52,
+                  child: Text(periods[index].$1,
+                      style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 10,
+                          letterSpacing: 1)),
+                ),
+                Expanded(
+                  child: segments == null
+                      ? LinearProgressIndicator(
+                          minHeight: 7,
+                          value: values[index] / peak,
+                          backgroundColor: AppColors.mantle,
+                          color: color,
+                        )
+                      : _TodoBar(
+                          pending: segments![index].pending,
+                          done: segments![index].done,
+                          totalPeak: peak,
+                        ),
+                ),
+                SizedBox(
+                  width: 52,
+                  child: Text(valueLabel(index),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                          color: color ?? AppColors.muted, fontSize: 10)),
+                ),
+              ]),
+            ),
+        ]),
+      );
+}
+
+class _TodoBar extends StatelessWidget {
+  const _TodoBar(
+      {required this.pending, required this.done, required this.totalPeak});
+
+  final int pending;
+  final int done;
+  final int totalPeak;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = pending + done;
+    if (total == 0) {
+      return Container(height: 7, color: AppColors.mantle);
+    }
+    return SizedBox(
+      height: 7,
+      child: Row(children: [
+        if (pending > 0)
+          Expanded(
+            flex: pending,
+            child: Container(color: AppColors.pink),
+          ),
+        if (done > 0)
+          Expanded(
+            flex: done,
+            child: Container(color: AppColors.teal),
+          ),
+        if (total < totalPeak)
+          Expanded(
+              flex: totalPeak - total,
+              child: Container(color: AppColors.mantle)),
+      ]),
+    );
+  }
+}
+
+class _ActivityLegend extends StatelessWidget {
+  const _ActivityLegend({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 6, height: 6, color: color),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(color: color, fontSize: 8)),
+      ]);
 }
 
 class _TodoRow extends StatelessWidget {
@@ -342,142 +526,6 @@ class _TodoRow extends StatelessWidget {
         ]),
       );
 }
-
-class _StreakBars extends StatelessWidget {
-  const _StreakBars({required this.days});
-
-  final List<StudyDay> days;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final recent = List.generate(7, (index) => now.subtract(Duration(days: 6 - index)));
-    final minutes = recent.map((date) {
-      final day = days.where((item) => _sameDate(item.date, date)).firstOrNull;
-      return day?.minutes ?? 0;
-    }).toList();
-    final peak = max(1, minutes.fold<int>(0, max));
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text(
-        'STREAK + GAINS',
-        style: TextStyle(
-          color: AppColors.muted,
-          fontSize: 11,
-          letterSpacing: 1.4,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 10),
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(children: [
-          const _BarLegend(label: 'STREAK', color: AppColors.peach),
-          const SizedBox(height: 10),
-          for (var index = 0; index < recent.length; index++)
-            _DayBar(
-              label: _dayLabel(recent[index]),
-              value: minutes[index] > 0 ? 1 : 0,
-              maxValue: 1,
-              valueLabel: minutes[index] > 0 ? 'ON' : '--',
-              color: AppColors.peach,
-            ),
-          const SizedBox(height: 14),
-          const _BarLegend(label: 'STUDY GAINS', color: AppColors.teal),
-          const SizedBox(height: 10),
-          for (var index = 0; index < recent.length; index++)
-            _DayBar(
-              label: _dayLabel(recent[index]),
-              value: minutes[index],
-              maxValue: peak,
-              valueLabel: '${minutes[index]}m',
-              color: AppColors.teal,
-            ),
-        ]),
-      ),
-    ]);
-  }
-}
-
-class _BarLegend extends StatelessWidget {
-  const _BarLegend({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Row(children: [
-        Container(width: 8, height: 8, color: color),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.1,
-          ),
-        ),
-      ]);
-}
-
-class _DayBar extends StatelessWidget {
-  const _DayBar({
-    required this.label,
-    required this.value,
-    required this.maxValue,
-    required this.valueLabel,
-    required this.color,
-  });
-
-  final String label;
-  final int value;
-  final int maxValue;
-  final String valueLabel;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 7),
-        child: Row(children: [
-          SizedBox(
-            width: 28,
-            child: Text(
-              label,
-              style: const TextStyle(color: AppColors.muted, fontSize: 10),
-            ),
-          ),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                minHeight: 7,
-                value: value / maxValue,
-                backgroundColor: AppColors.mantle,
-                color: color,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 34,
-            child: Text(
-              valueLabel,
-              textAlign: TextAlign.right,
-              style: TextStyle(color: color, fontSize: 10),
-            ),
-          ),
-        ]),
-      );
-}
-
-bool _sameDate(DateTime left, DateTime right) =>
-    left.year == right.year && left.month == right.month && left.day == right.day;
-
-String _dayLabel(DateTime date) =>
-    const ['M', 'T', 'W', 'T', 'F', 'S', 'S'][date.weekday - 1];
 
 class _StatBlock extends StatelessWidget {
   const _StatBlock({

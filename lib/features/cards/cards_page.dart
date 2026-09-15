@@ -89,7 +89,8 @@ class _CardsPageState extends State<CardsPage> {
                   ),
                   Text(
                     '$_cardLimit cards',
-                    style: const TextStyle(color: AppColors.mauve, fontSize: 12),
+                    style:
+                        const TextStyle(color: AppColors.mauve, fontSize: 12),
                   ),
                 ],
               ),
@@ -99,7 +100,8 @@ class _CardsPageState extends State<CardsPage> {
                 max: 70,
                 divisions: 40,
                 label: '$_cardLimit',
-                onChanged: (value) => setState(() => _cardLimit = value.round()),
+                onChanged: (value) =>
+                    setState(() => _cardLimit = value.round()),
               ),
               const SizedBox(height: 4),
               TextField(
@@ -121,14 +123,16 @@ class _CardsPageState extends State<CardsPage> {
                       source: 'Pasted notes',
                     );
                     await context.read<AppState>().addDeck(
-                      title: 'Notes ${state.decks.length + 1}',
-                      parsed: parsed,
-                      sourceName: 'Pasted notes',
-                    );
+                          title: 'Notes ${state.decks.length + 1}',
+                          parsed: parsed,
+                          sourceName: 'Pasted notes',
+                        );
                     _notes.clear();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${parsed.length} cards added locally')),
+                        SnackBar(
+                            content:
+                                Text('${parsed.length} cards added locally')),
                       );
                     }
                   },
@@ -149,7 +153,9 @@ class _CardsPageState extends State<CardsPage> {
                         )
                       : const Icon(Icons.picture_as_pdf_outlined),
                   label: Text(
-                    _isImporting ? 'Reading PDF locally...' : 'Import PDF locally',
+                    _isImporting
+                        ? 'Reading PDF locally...'
+                        : 'Import PDF locally',
                   ),
                 ),
               ),
@@ -209,7 +215,8 @@ class _CardsPageState extends State<CardsPage> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _confirmDeleteDeck(String deckId) async {
@@ -271,7 +278,8 @@ class _ReviewPanelState extends State<_ReviewPanel> {
           Icon(Icons.check_circle_outline_rounded, color: AppColors.teal),
           SizedBox(width: 12),
           Expanded(
-            child: Text('You are caught up. Come back when the next card is due.'),
+            child:
+                Text('You are caught up. Come back when the next card is due.'),
           ),
         ]),
       );
@@ -302,20 +310,21 @@ class _ReviewPanelState extends State<_ReviewPanel> {
               style: const TextStyle(color: AppColors.muted, fontSize: 11)),
         ]),
         const SizedBox(height: 18),
-        const Text('DEFINITION',
+        const Text('PROMPT',
             style: TextStyle(color: AppColors.muted, fontSize: 11)),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: _showAnswer ? null : () => setState(() => _showAnswer = true),
-          child: Text(card.back,
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+          child: Text(card.front,
+              style:
+                  const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
         ),
         if (_showAnswer) ...[
           const SizedBox(height: 14),
           const Text('ANSWER',
               style: TextStyle(color: AppColors.muted, fontSize: 11)),
           const SizedBox(height: 6),
-          Text(card.front, style: const TextStyle(fontSize: 18)),
+          Text(card.back, style: const TextStyle(fontSize: 18)),
           const SizedBox(height: 18),
           const Text('How well did you remember it?',
               style: TextStyle(fontSize: 12, color: AppColors.muted)),
@@ -352,25 +361,32 @@ class _ReviewPanelState extends State<_ReviewPanel> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => state.toggleDeckMastery(index),
-              icon: Icon(card.isMastered
-                  ? Icons.check_circle
-                  : Icons.circle_outlined),
+              icon: Icon(
+                  card.isMastered ? Icons.check_circle : Icons.circle_outlined),
               label: Text(card.isMastered ? 'Mastered' : 'Mark mastered'),
             ),
           ),
           const SizedBox(height: 10),
           Row(children: [
             _RatingButton(
-                label: 'Again', color: AppColors.pink, onPressed: () => _rate(state, index, ReviewRating.again)),
+                label: 'Again',
+                color: AppColors.pink,
+                onPressed: () => _rate(state, index, ReviewRating.again)),
             const SizedBox(width: 6),
             _RatingButton(
-                label: 'Hard', color: AppColors.peach, onPressed: () => _rate(state, index, ReviewRating.hard)),
+                label: 'Hard',
+                color: AppColors.peach,
+                onPressed: () => _rate(state, index, ReviewRating.hard)),
             const SizedBox(width: 6),
             _RatingButton(
-                label: 'Good', color: AppColors.teal, onPressed: () => _rate(state, index, ReviewRating.good)),
+                label: 'Good',
+                color: AppColors.teal,
+                onPressed: () => _rate(state, index, ReviewRating.good)),
             const SizedBox(width: 6),
             _RatingButton(
-                label: 'Easy', color: AppColors.mauve, onPressed: () => _rate(state, index, ReviewRating.easy)),
+                label: 'Easy',
+                color: AppColors.mauve,
+                onPressed: () => _rate(state, index, ReviewRating.easy)),
           ]),
         ] else ...[
           const SizedBox(height: 18),
@@ -483,7 +499,8 @@ class _EmptyState extends StatelessWidget {
         child: const Column(children: [
           Icon(Icons.style_outlined, color: AppColors.muted, size: 30),
           SizedBox(height: 10),
-          Text('Your deck is quiet.', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text('Your deck is quiet.',
+              style: TextStyle(fontWeight: FontWeight.bold)),
           SizedBox(height: 4),
           Text(
             'Paste a few notes above to make the first cards.',
@@ -493,4 +510,3 @@ class _EmptyState extends StatelessWidget {
         ]),
       );
 }
-

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+enum CardType { standard, cloze }
+
 class Flashcard {
   const Flashcard({
     required this.front,
@@ -16,7 +18,12 @@ class Flashcard {
     this.repetitions = 0,
     this.lapses = 0,
     this.lastReviewed,
+    required this.id,
+    this.type = CardType.standard,
   });
+
+  final String id;
+  final CardType type;
 
   final String front;
   final String back;
@@ -40,9 +47,12 @@ class Flashcard {
     int? repetitions,
     int? lapses,
     DateTime? lastReviewed,
-  }) => Flashcard(
+  }) =>
+      Flashcard(
+        id: id,
         front: front,
         back: back,
+        type: type,
         isMastered: isMastered ?? this.isMastered,
         tags: tags,
         source: source,
@@ -70,6 +80,8 @@ class Flashcard {
         'repetitions': repetitions,
         'lapses': lapses,
         'lastReviewed': lastReviewed?.toIso8601String(),
+        'id': id,
+        'type': type.name,
       };
 
   factory Flashcard.fromJson(Map<String, dynamic> json) => Flashcard(
@@ -86,7 +98,22 @@ class Flashcard {
         repetitions: json['repetitions'] as int? ?? 0,
         lapses: json['lapses'] as int? ?? 0,
         lastReviewed: DateTime.tryParse(json['lastReviewed'] as String? ?? ''),
+        id: json['id'] as String? ??
+            _stableCardId(
+                json['front'] as String? ?? '', json['back'] as String? ?? ''),
+        type: CardType.values.firstWhere(
+          (value) => value.name == json['type'],
+          orElse: () => CardType.standard,
+        ),
       );
+}
+
+String _stableCardId(String front, String back) {
+  var hash = 17;
+  for (final codeUnit in '$front\u0000$back'.codeUnits) {
+    hash = 37 * hash + codeUnit;
+  }
+  return 'card-${hash.abs()}';
 }
 
 enum ReviewRating { again, hard, good, easy }
@@ -113,7 +140,8 @@ extension FlashcardReview on Flashcard {
       case ReviewRating.hard:
         nextEase = (ease - .15).clamp(1.3, 3.0).toDouble();
         nextRepetitions++;
-        nextInterval = max(1, (intervalDays == 0 ? 1 : intervalDays * 1.2).round());
+        nextInterval =
+            max(1, (intervalDays == 0 ? 1 : intervalDays * 1.2).round());
         nextDue = reviewedAt.add(Duration(days: nextInterval));
       case ReviewRating.good:
         nextRepetitions++;
@@ -191,6 +219,7 @@ class StudyDay {
     required this.date,
     this.minutes = 0,
     this.reviews = 0,
+    this.createdTodos = 0,
     this.completedTodos = 0,
     this.restReason,
   });
@@ -198,6 +227,7 @@ class StudyDay {
   final DateTime date;
   final int minutes;
   final int reviews;
+  final int createdTodos;
   final int completedTodos;
   final String? restReason;
 
@@ -207,6 +237,7 @@ class StudyDay {
         'date': date.toIso8601String(),
         'minutes': minutes,
         'reviews': reviews,
+        'createdTodos': createdTodos,
         'completedTodos': completedTodos,
         'restReason': restReason,
       };
@@ -215,6 +246,7 @@ class StudyDay {
         date: DateTime.parse(json['date'] as String),
         minutes: json['minutes'] as int? ?? 0,
         reviews: json['reviews'] as int? ?? 0,
+        createdTodos: json['createdTodos'] as int? ?? 0,
         completedTodos: json['completedTodos'] as int? ?? 0,
         restReason: json['restReason'] as String?,
       );
