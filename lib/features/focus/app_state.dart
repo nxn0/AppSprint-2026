@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 
 import '../../data/local_store.dart';
@@ -27,7 +25,10 @@ class AppState extends ChangeNotifier {
   int _focusElapsedSeconds = 0;
 
   Future<void> initialize() async {
-    moniker = store.moniker ?? _makeMoniker();
+    final savedMoniker = store.moniker;
+    moniker = savedMoniker == null || savedMoniker.startsWith('anon-')
+        ? 'fellow homo sapien'
+        : savedMoniker;
     await store.saveMoniker(moniker);
     cards = store.cards;
     decks = store.decks;
@@ -72,7 +73,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _makeMoniker() => 'anon-${1000 + Random().nextInt(8999)}';
+  Future<void> updateMoniker(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return;
+    moniker = trimmed;
+    notifyListeners();
+    await store.saveMoniker(moniker);
+  }
 
   int get streak {
     final activeDates = days
@@ -196,6 +203,7 @@ class AppState extends ChangeNotifier {
       ...todos,
       TodoItem(id: '${DateTime.now().microsecondsSinceEpoch}', title: trimmed),
     ];
+    notifyListeners();
     await logActivity(createdTodos: 1);
     await store.saveTodos(todos);
   }
@@ -207,6 +215,7 @@ class AppState extends ChangeNotifier {
         .map((todo) =>
             todo.id == todoId ? todo.copyWith(isDone: !todo.isDone) : todo)
         .toList();
+    notifyListeners();
     await logActivity(completedTodos: wasDone ? -1 : 1);
     await store.saveTodos(todos);
   }
@@ -315,6 +324,28 @@ class AppState extends ChangeNotifier {
       );
     final updated = deck.copyWith(cards: updatedCards);
     decks = decks.map((item) => item.id == deck.id ? updated : item).toList();
+    notifyListeners();
+    await store.saveDecks(decks);
+  }
+
+  Future<void> updateDeckCard({
+    required String deckId,
+    required String cardId,
+    required String front,
+    required String back,
+  }) async {
+    final deck = decks.where((item) => item.id == deckId).firstOrNull;
+    if (deck == null || front.trim().isEmpty || back.trim().isEmpty) return;
+    final updatedCards = deck.cards
+        .map((card) => card.id == cardId
+            ? card.copyWith(front: front.trim(), back: back.trim())
+            : card)
+        .toList();
+    decks = decks
+        .map((item) => item.id == deckId
+            ? item.copyWith(cards: updatedCards)
+            : item)
+        .toList();
     notifyListeners();
     await store.saveDecks(decks);
   }

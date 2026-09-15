@@ -15,15 +15,8 @@ class CardsPage extends StatefulWidget {
 }
 
 class _CardsPageState extends State<CardsPage> {
-  final _notes = TextEditingController();
   bool _isImporting = false;
   int _cardLimit = 30;
-
-  @override
-  void dispose() {
-    _notes.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,44 +96,6 @@ class _CardsPageState extends State<CardsPage> {
                 onChanged: (value) =>
                     setState(() => _cardLimit = value.round()),
               ),
-              const SizedBox(height: 4),
-              TextField(
-                controller: _notes,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  hintText:
-                      'Q: What is a closure? A: A function with its lexical scope.\nterm :: definition\n- [ ] front -> back',
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    final parsed = FlashcardParser.parse(
-                      _notes.text,
-                      maxCards: _cardLimit,
-                      source: 'Pasted notes',
-                    );
-                    await context.read<AppState>().addDeck(
-                          title: 'Notes ${state.decks.length + 1}',
-                          parsed: parsed,
-                          sourceName: 'Pasted notes',
-                        );
-                    _notes.clear();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content:
-                                Text('${parsed.length} cards added locally')),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.auto_awesome_rounded),
-                  label: const Text('Extract cards'),
-                ),
-              ),
-              const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -313,12 +268,21 @@ class _ReviewPanelState extends State<_ReviewPanel> {
         const Text('PROMPT',
             style: TextStyle(color: AppColors.muted, fontSize: 11)),
         const SizedBox(height: 8),
-        GestureDetector(
-          onTap: _showAnswer ? null : () => setState(() => _showAnswer = true),
-          child: Text(card.front,
-              style:
-                  const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-        ),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: _showAnswer ? null : () => setState(() => _showAnswer = true),
+              child: Text(card.front,
+                  style: const TextStyle(
+                      fontSize: 19, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          IconButton(
+            onPressed: () => _editCard(context, deck, card),
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit flashcard',
+          ),
+        ]),
         if (_showAnswer) ...[
           const SizedBox(height: 14),
           const Text('ANSWER',
@@ -410,6 +374,52 @@ class _ReviewPanelState extends State<_ReviewPanel> {
         _showAnswer = false;
         _position = 0;
       });
+    }
+  }
+
+  Future<void> _editCard(
+      BuildContext context, FlashcardDeck deck, Flashcard card) async {
+    final frontController = TextEditingController(text: card.front);
+    final backController = TextEditingController(text: card.back);
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit flashcard'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: frontController,
+            maxLines: 3,
+            decoration: const InputDecoration(labelText: 'Prompt'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: backController,
+            maxLines: 3,
+            decoration: const InputDecoration(labelText: 'Answer'),
+          ),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+                dialogContext, (frontController.text, backController.text)),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    frontController.dispose();
+    backController.dispose();
+    if (result != null && context.mounted) {
+      await context.read<AppState>().updateDeckCard(
+            deckId: deck.id,
+            cardId: card.id,
+            front: result.$1,
+            back: result.$2,
+          );
     }
   }
 }

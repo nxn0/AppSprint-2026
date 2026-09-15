@@ -15,8 +15,19 @@ class FocusPage extends StatelessWidget {
       children: [
         const _BrandHeader(),
         const SizedBox(height: 26),
-        Text('Good focus, ${state.moniker}',
-            style: Theme.of(context).textTheme.titleLarge),
+        Row(
+          children: [
+            Expanded(
+              child: Text('Good focus, ${state.moniker}',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            IconButton(
+              onPressed: () => _rename(context, state.moniker),
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Change name',
+            ),
+          ],
+        ),
         const SizedBox(height: 5),
         const Text('A quiet room for your next useful hour.',
             style: TextStyle(color: AppColors.muted)),
@@ -50,6 +61,37 @@ class FocusPage extends StatelessWidget {
         ]),
       ],
     );
+  }
+
+  Future<void> _rename(BuildContext context, String currentName) async {
+    final controller = TextEditingController(text: currentName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('What should we call you?'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => Navigator.pop(dialogContext, controller.text),
+          decoration: const InputDecoration(hintText: 'Your name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name != null && context.mounted) {
+      await context.read<AppState>().updateMoniker(name);
+    }
   }
 }
 

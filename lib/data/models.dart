@@ -40,6 +40,8 @@ class Flashcard {
   final DateTime? lastReviewed;
 
   Flashcard copyWith({
+    String? front,
+    String? back,
     bool? isMastered,
     DateTime? dueAt,
     int? intervalDays,
@@ -50,8 +52,8 @@ class Flashcard {
   }) =>
       Flashcard(
         id: id,
-        front: front,
-        back: back,
+        front: front ?? this.front,
+        back: back ?? this.back,
         type: type,
         isMastered: isMastered ?? this.isMastered,
         tags: tags,

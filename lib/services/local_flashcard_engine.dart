@@ -159,8 +159,7 @@ class LocalFlashcardEngine {
       }
     }
 
-    // maxCards is retained for existing callers, but never lowers the 25-card target.
-    if (maxCards != null && maxCards >= 25 && cards.length > maxCards) {
+    if (maxCards != null && cards.length > maxCards) {
       return cards.take(maxCards).toList();
     }
     return cards;
