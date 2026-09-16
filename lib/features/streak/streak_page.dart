@@ -463,31 +463,45 @@ class _ActivityBarGroup extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(children: [
-          Row(children: [
-            Text(title,
-                style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 9,
-                    letterSpacing: 1.1,
-                    fontWeight: FontWeight.bold)),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: onSetGoal,
-              icon: const Icon(Icons.flag_outlined, size: 14),
-              label: const Text('Set weekly goal'),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 24),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+          SizedBox(
+            height: 24,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(title,
+                      style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 9,
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.bold)),
+                ),
+                TextButton.icon(
+                  onPressed: onSetGoal,
+                  icon: const Icon(Icons.flag_outlined, size: 14),
+                  label: const Text('Set weekly goal'),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 24),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                if (segments != null)
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ActivityLegend(color: AppColors.pink, label: 'pending'),
+                        SizedBox(width: 8),
+                        _ActivityLegend(color: AppColors.teal, label: 'done'),
+                      ],
+                    ),
+                  ),
+              ],
             ),
-            if (segments != null) ...[
-              const Spacer(),
-              const _ActivityLegend(color: AppColors.pink, label: 'pending'),
-              const SizedBox(width: 8),
-              const _ActivityLegend(color: AppColors.teal, label: 'done'),
-            ],
-          ]),
+          ),
           const SizedBox(height: 5),
           for (var index = 0; index < periods.length; index++)
             Padding(
