@@ -401,35 +401,74 @@ class _ActivitySummary extends StatelessWidget {
     required String suffix,
     required ValueChanged<int> onSave,
   }) async {
-    final controller = TextEditingController(text: '$current');
     final value = await showDialog<int>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
+      builder: (_) => _GoalDialog(
+        title: title,
+        current: current,
+        suffix: suffix,
+      ),
+    );
+    if (value != null && value > 0 && context.mounted) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (context.mounted) onSave(value);
+    }
+  }
+}
+
+class _GoalDialog extends StatefulWidget {
+  const _GoalDialog({
+    required this.title,
+    required this.current,
+    required this.suffix,
+  });
+
+  final String title;
+  final int current;
+  final String suffix;
+
+  @override
+  State<_GoalDialog> createState() => _GoalDialogState();
+}
+
+class _GoalDialogState extends State<_GoalDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: '${widget.current}');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.title),
         content: TextField(
-          controller: controller,
+          controller: _controller,
           autofocus: true,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(suffixText: suffix),
+          decoration: InputDecoration(suffixText: widget.suffix),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(
-              dialogContext,
-              int.tryParse(controller.text.trim()),
+              context,
+              int.tryParse(_controller.text.trim()),
             ),
             child: const Text('Save'),
           ),
         ],
-      ),
-    );
-    controller.dispose();
-    if (value != null && value > 0 && context.mounted) onSave(value);
-  }
+      );
 }
 
 class _ActivityBarGroup extends StatelessWidget {

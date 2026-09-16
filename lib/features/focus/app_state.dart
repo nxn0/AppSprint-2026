@@ -29,6 +29,7 @@ class AppState extends ChangeNotifier {
   Timer? _timer;
   Timer? _restTimer;
   int _focusElapsedSeconds = 0;
+  bool _focusSessionStarted = false;
 
   Future<void> initialize() async {
     final savedMoniker = store.moniker;
@@ -69,12 +70,8 @@ class AppState extends ChangeNotifier {
     selectedDeckId = decks.firstOrNull?.id;
     days = store.days;
     todos = store.todos;
-    completedSessions = store.completedSessions >= 5
-        ? 0
-        : store.completedSessions.clamp(0, 4);
-    if (store.completedSessions != completedSessions) {
-      await store.saveCompletedSessions(completedSessions);
-    }
+    completedSessions = 0;
+    await store.saveCompletedSessions(completedSessions);
     totalFocusMinutes = store.totalFocusMinutes;
     focusMinutes = store.focusMinutes;
     breakMinutes = store.breakMinutes;
@@ -133,6 +130,7 @@ class AppState extends ChangeNotifier {
   }
 
   int get todayFocusMinutes {
+    if (!_focusSessionStarted) return 0;
     final today = _dateKey(DateTime.now());
     final logged = days
         .where((day) => _dateKey(day.date) == today)
@@ -174,6 +172,7 @@ class AppState extends ChangeNotifier {
       _timer?.cancel();
       isRunning = false;
     } else {
+      if (!isBreak) _focusSessionStarted = true;
       isRunning = true;
       _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     }
