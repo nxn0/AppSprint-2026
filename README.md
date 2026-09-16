@@ -81,17 +81,7 @@ All core data is stored locally on the device. No account or backend is required
 ---
 
 ## Demo Video
-
-`[Add public or unlisted demo video URL]`
-
-The demo should be no longer than two minutes and show:
-
-1. The study consistency problem.
-2. Pomodoro setup and a focus/rest cycle.
-3. Raw text or PDF flashcard import.
-4. Flashcard review and editing.
-5. Todos, streaks, and weekly goals.
-
+https://youtube.com/shorts/lDWhj_KxAJg?si=vBVTsw1D22D5uYe3
 ---
 
 ## APK Download
