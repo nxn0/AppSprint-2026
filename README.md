@@ -72,19 +72,11 @@ All core data is stored locally on the device. No account or backend is required
 
 ## Screenshots
 
-Screenshots should be added before final submission. Current repository assets:
-
-```text
-assets/
-├── banner.jpeg
-└── participant.png
-```
-
 | Screen | Preview |
 |---|---|
-| Focus and Pomodoro timer | `[Add screenshot]` |
-| Cards and parser | `[Add screenshot]` |
-| Streaks, activity windows, and goals | `[Add screenshot]` |
+| Focus and Pomodoro timer | <img src="assets/Screenshot_20260916_102506.jpg" alt="Pomly focus screen with running timer" width="240"> |
+| Cards and parser | <img src="assets/Screenshot_20260916_102523.jpg" alt="Pomly study library and flashcard review screen" width="240"> |
+| Streaks, activity windows, and goals | <img src="assets/Screenshot_20260916_102528.jpg" alt="Pomly streaks, todos, and weekly goals screen" width="240"> |
 
 ---
 
