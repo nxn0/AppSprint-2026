@@ -51,4 +51,16 @@ class LocalStore {
   int get weeklyTodoGoal => _preferences.getInt('weeklyTodoGoal') ?? 5;
   Future<void> saveWeeklyTodoGoal(int value) =>
       _preferences.setInt('weeklyTodoGoal', value);
+
+  int get restAllowance => _preferences.getInt('restAllowance') ?? 3;
+  Future<void> saveRestAllowance(int value) =>
+      _preferences.setInt('restAllowance', value);
+
+    DateTime? get lastRestCheck {
+        final value = _preferences.getString('lastRestCheck');
+        return value == null ? null : DateTime.tryParse(value);
+    }
+
+    Future<void> saveLastRestCheck(DateTime value) =>
+            _preferences.setString('lastRestCheck', value.toIso8601String());
 }

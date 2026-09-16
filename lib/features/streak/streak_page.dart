@@ -79,10 +79,10 @@ class _StreakPageState extends State<StreakPage> {
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: _StatBlock(
               label: 'REST ALLOWANCE',
-              value: '3d',
+              value: '${state.restAllowance}d',
               color: AppColors.pink,
             ),
           ),

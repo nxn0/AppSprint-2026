@@ -23,9 +23,11 @@ class AppState extends ChangeNotifier {
   int breakMinutes = 5;
   int weeklyMinutesGoal = 300;
   int weeklyTodoGoal = 5;
+  int restAllowance = 3;
   int completedSessions = 0;
   int totalFocusMinutes = 0;
   Timer? _timer;
+  Timer? _restTimer;
   int _focusElapsedSeconds = 0;
 
   Future<void> initialize() async {
@@ -73,6 +75,12 @@ class AppState extends ChangeNotifier {
     breakMinutes = store.breakMinutes;
     weeklyMinutesGoal = store.weeklyMinutesGoal;
     weeklyTodoGoal = store.weeklyTodoGoal;
+    restAllowance = store.restAllowance.clamp(0, 3);
+    await _reconcileRestAllowance();
+    _restTimer ??= Timer.periodic(const Duration(minutes: 1), (_) async {
+      await _reconcileRestAllowance();
+      notifyListeners();
+    });
     remaining = Duration(minutes: focusMinutes);
     final loggedMinutes = days.fold<int>(0, (sum, day) => sum + day.minutes);
     if (loggedMinutes > totalFocusMinutes) {
@@ -91,6 +99,7 @@ class AppState extends ChangeNotifier {
   }
 
   int get streak {
+    if (restAllowance == 0) return 0;
     final activeDates = days
         .where((day) =>
             day.minutes > 0 ||
@@ -222,12 +231,47 @@ class AppState extends ChangeNotifier {
 
   Future<void> logRest(String reason) async {
     final today = DateTime.now();
+    final todayKey = _dateKey(today);
+    final alreadyResting =
+        days.where((day) => _dateKey(day.date) == todayKey).firstOrNull?.isRest ??
+            false;
+    if (!alreadyResting && restAllowance > 0) {
+      restAllowance--;
+      await store.saveRestAllowance(restAllowance);
+    }
     days = [
-      ...days.where((day) => _dateKey(day.date) != _dateKey(today)),
+      ...days.where((day) => _dateKey(day.date) != todayKey),
       StudyDay(date: today, restReason: reason),
     ];
     await store.saveDays(days);
     notifyListeners();
+  }
+
+  Future<void> _reconcileRestAllowance() async {
+    final today = _dayOnly(DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    final storedCheck = store.lastRestCheck;
+    var check = storedCheck == null
+        ? yesterday
+        : _dayOnly(storedCheck);
+    if (check.isAfter(yesterday)) return;
+
+    var cursor = check.add(const Duration(days: 1));
+    while (!cursor.isAfter(yesterday)) {
+      final key = _dateKey(cursor);
+      final day = days.where((item) => _dateKey(item.date) == key).firstOrNull;
+      final active = day != null &&
+          (day.minutes > 0 ||
+              day.reviews > 0 ||
+              day.createdTodos > 0 ||
+              day.completedTodos > 0);
+      if (!active && day?.isRest != true && restAllowance > 0) {
+        restAllowance--;
+      }
+      cursor = cursor.add(const Duration(days: 1));
+    }
+    await store.saveRestAllowance(restAllowance);
+    await store.saveLastRestCheck(yesterday);
   }
 
   Future<void> addCards(List<Flashcard> parsed) async {
@@ -341,6 +385,10 @@ class AppState extends ChangeNotifier {
     }
     final today = DateTime.now();
     final key = _dateKey(today);
+    if (restAllowance != 3) {
+      restAllowance = 3;
+      await store.saveRestAllowance(restAllowance);
+    }
     final index = days.indexWhere((day) => _dateKey(day.date) == key);
     final current = index == -1 ? StudyDay(date: today) : days[index];
     final updated = StudyDay(
@@ -399,9 +447,12 @@ class AppState extends ChangeNotifier {
 
   String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
 
+  DateTime _dayOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
   @override
   void dispose() {
     _timer?.cancel();
+    _restTimer?.cancel();
     super.dispose();
   }
 }
