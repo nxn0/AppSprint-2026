@@ -84,12 +84,12 @@ class AppState extends ChangeNotifier {
   int get streak {
     final activeDates = days
         .where((day) =>
-            day.minutes > 0 || day.reviews > 0 || day.completedTodos > 0)
+            day.minutes > 0 ||
+            day.reviews > 0 ||
+            day.createdTodos > 0 ||
+            day.completedTodos > 0)
         .map((day) => _dateKey(day.date))
         .toSet();
-    if (totalFocusMinutes > 0) {
-      activeDates.add(_dateKey(DateTime.now()));
-    }
     var cursor = DateTime.now();
     var count = 0;
     var idleDays = 0;

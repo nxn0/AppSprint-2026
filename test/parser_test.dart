@@ -128,4 +128,29 @@ JButton is used to create a labeled button.
     expect(card.scheduled(ReviewRating.good, now: now).intervalDays, 1);
     expect(card.scheduled(ReviewRating.easy, now: now).intervalDays, 4);
   });
+
+  test('parses raw text pairs without sentence punctuation', () {
+    final cards = FlashcardParser.parse('''
+Q: What is a closure? A: A function with lexical scope
+term :: definition
+front -> back
+''');
+
+    expect(cards, hasLength(3));
+    expect(cards[0].front, 'What is a closure?');
+    expect(cards[1].back, 'definition');
+    expect(cards[2].back, 'back');
+  });
+
+  test('parses question and answer on separate lines', () {
+    final cards = FlashcardParser.parse('''
+Q: Mention the solution for starvation in priority process scheduling.
+A: Aging: gradually increase the priority of waiting processes so that processes waiting for a long time eventually get CPU access.
+''');
+
+    expect(cards, hasLength(1));
+    expect(cards.single.front,
+        'Mention the solution for starvation in priority process scheduling.');
+    expect(cards.single.back, startsWith('Aging: gradually increase'));
+  });
 }

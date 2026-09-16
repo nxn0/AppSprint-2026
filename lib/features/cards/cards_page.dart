@@ -15,8 +15,15 @@ class CardsPage extends StatefulWidget {
 }
 
 class _CardsPageState extends State<CardsPage> {
+  final _rawTextController = TextEditingController();
   bool _isImporting = false;
   int _cardLimit = 30;
+
+  @override
+  void dispose() {
+    _rawTextController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +103,26 @@ class _CardsPageState extends State<CardsPage> {
                 onChanged: (value) =>
                     setState(() => _cardLimit = value.round()),
               ),
+              TextField(
+                controller: _rawTextController,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'RAW TEXT',
+                  hintText: 'Paste notes, definitions, or study text',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _parseRawText,
+                  icon: const Icon(Icons.auto_awesome_rounded),
+                  label: const Text('Parse text into cards'),
+                ),
+              ),
+              const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -123,6 +150,31 @@ class _CardsPageState extends State<CardsPage> {
         if (deck == null || deck.cards.isEmpty) const _EmptyState(),
       ],
     );
+  }
+
+  Future<void> _parseRawText() async {
+    final text = _rawTextController.text.trim();
+    if (text.isEmpty) {
+      _showMessage('Paste some text first.');
+      return;
+    }
+    final state = context.read<AppState>();
+    final parsed = FlashcardParser.parse(
+      text,
+      maxCards: _cardLimit,
+      source: 'Pasted text',
+    );
+    await state.addDeck(
+      title: 'Notes ${state.decks.length + 1}',
+      parsed: parsed,
+      sourceName: 'Pasted text',
+    );
+    _rawTextController.clear();
+    if (mounted) {
+      _showMessage(parsed.isEmpty
+          ? 'No flashcards could be generated from that text.'
+          : '${parsed.length} cards added locally.');
+    }
   }
 
   Future<void> _importPdf() async {

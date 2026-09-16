@@ -55,16 +55,40 @@ class LocalFlashcardEngine {
     String source = '',
     int? maxCards,
   }) {
-    final cards = <Flashcard>[];
-    if (rawText.trim().isEmpty) return cards;
+    if (rawText.trim().isEmpty) return const [];
 
-    final withoutCodeLines = rawText
-      .split(RegExp(r'\r?\n'))
-      .where((line) => !_isCodeSentence(line.trim()))
-      .join(' ');
+    final lines = rawText
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty && !_isCodeSentence(line))
+        .toList();
+    final explicitCards = <Flashcard>[];
+    final proseLines = <String>[];
+    for (var index = 0; index < lines.length; index++) {
+      var line = lines[index];
+      if (RegExp(r'^Q\s*:', caseSensitive: false).hasMatch(line) &&
+          index + 1 < lines.length &&
+          RegExp(r'^A\s*:', caseSensitive: false).hasMatch(lines[index + 1])) {
+        line = '$line ${lines[++index]}';
+      }
+      final pair = _explicitPair(line);
+      if (pair == null) {
+        proseLines.add(line);
+      } else {
+        explicitCards.add(_card(
+          id: 'explicit_${DateTime.now().microsecondsSinceEpoch}_${explicitCards.length}',
+          front: pair.$1,
+          back: pair.$2,
+          type: CardType.standard,
+          source: source,
+        ));
+      }
+    }
+    final withoutCodeLines = proseLines.join(' ');
     final clean = withoutCodeLines.replaceAll(RegExp(r'\s+'), ' ').trim();
-    final sentencePattern = RegExp(r'[^.!?]+[.!?]');
+    final sentencePattern = RegExp(r'[^.!?]+(?:[.!?]|$)');
     final matches = sentencePattern.allMatches(clean);
+    final cards = [...explicitCards];
 
     for (final match in matches) {
       final sentence = _removeRepeatedHeading(match.group(0)?.trim() ?? '');
@@ -163,6 +187,25 @@ class LocalFlashcardEngine {
       return cards.take(maxCards).toList();
     }
     return cards;
+  }
+
+  static (String, String)? _explicitPair(String line) {
+    final questionAnswer = RegExp(
+      r'^Q\s*:\s*(.+?)\s+A\s*:\s*(.+)$',
+      caseSensitive: false,
+    ).firstMatch(line);
+    if (questionAnswer != null) {
+      return (questionAnswer.group(1)!.trim(), questionAnswer.group(2)!.trim());
+    }
+    for (final separator in ['::', '->']) {
+      final parts = line.split(separator);
+      if (parts.length == 2 &&
+          parts.first.trim().isNotEmpty &&
+          parts.last.trim().isNotEmpty) {
+        return (parts.first.trim(), parts.last.trim());
+      }
+    }
+    return null;
   }
 
   static List<Flashcard> generate(
