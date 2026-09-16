@@ -85,8 +85,7 @@ https://youtube.com/shorts/lDWhj_KxAJg?si=vBVTsw1D22D5uYe3
 ---
 
 ## APK Download
-
-`[Add GitHub Releases APK URL]`
+https://github.com/nxn0/AppSprint-2026/releases/download/v1.0.1/pomly-v1.0.1.apk
 
 ## Tech Stack
 
