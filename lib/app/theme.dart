@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../core/constants.dart';
 
@@ -6,7 +7,7 @@ ThemeData buildAppTheme() {
   return ThemeData(
     brightness: Brightness.dark,
     scaffoldBackgroundColor: const Color(0xff1e1e2e),
-    fontFamily: 'monospace',
+    fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
     colorScheme: const ColorScheme.dark(
       surface: Color(0xff1e1e2e),
       primary: AppColors.mauve,
