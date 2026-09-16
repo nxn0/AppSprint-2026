@@ -35,4 +35,20 @@ class LocalStore {
   int get totalFocusMinutes => _preferences.getInt('totalFocusMinutes') ?? 0;
   Future<void> saveTotalFocusMinutes(int value) =>
       _preferences.setInt('totalFocusMinutes', value);
+
+  int get focusMinutes => _preferences.getInt('focusMinutes') ?? 25;
+  Future<void> saveFocusMinutes(int value) =>
+      _preferences.setInt('focusMinutes', value);
+
+  int get breakMinutes => _preferences.getInt('breakMinutes') ?? 5;
+  Future<void> saveBreakMinutes(int value) =>
+      _preferences.setInt('breakMinutes', value);
+
+  int get weeklyMinutesGoal => _preferences.getInt('weeklyMinutesGoal') ?? 300;
+  Future<void> saveWeeklyMinutesGoal(int value) =>
+      _preferences.setInt('weeklyMinutesGoal', value);
+
+  int get weeklyTodoGoal => _preferences.getInt('weeklyTodoGoal') ?? 5;
+  Future<void> saveWeeklyTodoGoal(int value) =>
+      _preferences.setInt('weeklyTodoGoal', value);
 }

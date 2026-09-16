@@ -32,13 +32,23 @@ class FocusPage extends StatelessWidget {
         const Text('A quiet room for your next useful hour.',
             style: TextStyle(color: AppColors.muted)),
         const SizedBox(height: 24),
-        _TimerCard(state: state),
+        Row(
+          children: [
+            Expanded(child: _TimerCard(state: state)),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              onPressed: () => _showTimerSettings(context, state),
+              icon: const Icon(Icons.tune_rounded),
+              tooltip: 'Timer settings',
+            ),
+          ],
+        ),
         const SizedBox(height: 18),
         Row(children: [
           Expanded(
             child: _MetricTile(
               label: 'TODAY',
-              value: '${state.totalFocusMinutes}m',
+              value: '${state.todayFocusMinutes}m',
               color: AppColors.peach,
             ),
           ),
@@ -93,6 +103,90 @@ class FocusPage extends StatelessWidget {
       await context.read<AppState>().updateMoniker(name);
     }
   }
+
+  Future<void> _showTimerSettings(BuildContext context, AppState state) async {
+    var focus = state.focusMinutes.toDouble();
+    var rest = state.breakMinutes.toDouble();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Timer settings'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DurationSlider(
+                label: 'FOCUS TIME',
+                value: focus,
+                min: 1,
+                max: 120,
+                onChanged: (value) => setDialogState(() => focus = value),
+              ),
+              _DurationSlider(
+                label: 'REST TIME',
+                value: rest,
+                min: 1,
+                max: 60,
+                onChanged: (value) => setDialogState(() => rest = value),
+              ),
+              Text(
+                'Long rest after cycle 5: ${(rest.round() * 5)} minutes',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                await state.updateTimerSettings(
+                  focusMinutes: focus.round(),
+                  breakMinutes: rest.round(),
+                );
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DurationSlider extends StatelessWidget {
+  const _DurationSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$label  ${value.round()}m',
+              style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+          Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: (max - min).round(),
+            onChanged: onChanged,
+          ),
+        ],
+      );
 }
 
 class _BrandHeader extends StatelessWidget {
@@ -128,15 +222,10 @@ class _TimerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = state.isBreak
-        ? (state.isLongBreak
-                ? AdaptivePlan.largeBreak(
-                    completedSessions: state.completedSessions,
-                    studyMinutes: state.totalFocusMinutes,
-                  )
-                : const Duration(minutes: 5))
-            .inSeconds
-        : 25 * 60;
+    final total = (state.isBreak
+        ? state.breakMinutes * (state.isLongBreak ? 5 : 1)
+        : state.focusMinutes) *
+      60;
     final progress = 1 - (state.remaining.inSeconds / total).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(20),

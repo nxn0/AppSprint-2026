@@ -19,6 +19,10 @@ class AppState extends ChangeNotifier {
   bool isBreak = false;
   bool isLongBreak = false;
   Duration remaining = const Duration(minutes: 25);
+  int focusMinutes = 25;
+  int breakMinutes = 5;
+  int weeklyMinutesGoal = 300;
+  int weeklyTodoGoal = 5;
   int completedSessions = 0;
   int totalFocusMinutes = 0;
   Timer? _timer;
@@ -65,6 +69,11 @@ class AppState extends ChangeNotifier {
     todos = store.todos;
     completedSessions = store.completedSessions;
     totalFocusMinutes = store.totalFocusMinutes;
+    focusMinutes = store.focusMinutes;
+    breakMinutes = store.breakMinutes;
+    weeklyMinutesGoal = store.weeklyMinutesGoal;
+    weeklyTodoGoal = store.weeklyTodoGoal;
+    remaining = Duration(minutes: focusMinutes);
     final loggedMinutes = days.fold<int>(0, (sum, day) => sum + day.minutes);
     if (loggedMinutes > totalFocusMinutes) {
       totalFocusMinutes = loggedMinutes;
@@ -90,23 +99,57 @@ class AppState extends ChangeNotifier {
             day.completedTodos > 0)
         .map((day) => _dateKey(day.date))
         .toSet();
+    if (isRunning) activeDates.add(_dateKey(DateTime.now()));
     var cursor = DateTime.now();
     var count = 0;
-    var idleDays = 0;
-    while (idleDays < 3) {
+    while (true) {
       final key = _dateKey(cursor);
       final day = days.where((item) => _dateKey(item.date) == key).firstOrNull;
       if (activeDates.contains(key)) {
         count++;
-        idleDays = 0;
       } else if (day?.isRest == true) {
-        idleDays = 0;
+        cursor = cursor.subtract(const Duration(days: 1));
+        continue;
       } else {
-        idleDays++;
+        break;
       }
       cursor = cursor.subtract(const Duration(days: 1));
     }
-    return idleDays >= 3 ? 0 : count;
+    return count;
+  }
+
+  int get todayFocusMinutes {
+    final today = _dateKey(DateTime.now());
+    final logged = days
+        .where((day) => _dateKey(day.date) == today)
+        .fold<int>(0, (sum, day) => sum + day.minutes);
+    return logged + (_focusElapsedSeconds ~/ 60);
+  }
+
+  Future<void> updateTimerSettings({
+    required int focusMinutes,
+    required int breakMinutes,
+  }) async {
+    this.focusMinutes = focusMinutes.clamp(1, 120);
+    this.breakMinutes = breakMinutes.clamp(1, 60);
+    if (!isRunning && !isBreak) {
+      remaining = Duration(minutes: this.focusMinutes);
+    }
+    await store.saveFocusMinutes(this.focusMinutes);
+    await store.saveBreakMinutes(this.breakMinutes);
+    notifyListeners();
+  }
+
+  Future<void> updateWeeklyMinutesGoal(int value) async {
+    weeklyMinutesGoal = value.clamp(1, 10080);
+    await store.saveWeeklyMinutesGoal(weeklyMinutesGoal);
+    notifyListeners();
+  }
+
+  Future<void> updateWeeklyTodoGoal(int value) async {
+    weeklyTodoGoal = value.clamp(1, 10000);
+    await store.saveWeeklyTodoGoal(weeklyTodoGoal);
+    notifyListeners();
   }
 
   Future<void> toggleTimer() async {
@@ -136,10 +179,10 @@ class AppState extends ChangeNotifier {
           isRunning = false;
           isBreak = false;
           isLongBreak = false;
-          remaining = const Duration(minutes: 25);
+          remaining = Duration(minutes: focusMinutes);
         } else {
           isBreak = false;
-          remaining = const Duration(minutes: 25);
+          remaining = Duration(minutes: focusMinutes);
         }
       } else {
         completedSessions++;
@@ -147,12 +190,9 @@ class AppState extends ChangeNotifier {
         _focusElapsedSeconds = 0;
         isBreak = true;
         isLongBreak = completedSessions % 5 == 0;
-        remaining = isLongBreak
-            ? AdaptivePlan.largeBreak(
-                completedSessions: completedSessions,
-                studyMinutes: totalFocusMinutes,
-              )
-            : const Duration(minutes: 5);
+        remaining = Duration(
+          minutes: isLongBreak ? breakMinutes * 5 : breakMinutes,
+        );
       }
     } else {
       remaining -= const Duration(seconds: 1);
@@ -167,11 +207,11 @@ class AppState extends ChangeNotifier {
     if (isBreak) {
       isBreak = false;
       isLongBreak = false;
-      remaining = const Duration(minutes: 25);
+      remaining = Duration(minutes: focusMinutes);
     } else {
       isBreak = true;
       isLongBreak = false;
-      remaining = const Duration(minutes: 5);
+      remaining = Duration(minutes: breakMinutes);
     }
     if (wasRunning) {
       isRunning = true;

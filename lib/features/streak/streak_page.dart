@@ -102,7 +102,13 @@ class _StreakPageState extends State<StreakPage> {
         _ActivitySummary(
           days: state.days,
           todos: state.todos,
-          liveFocusMinutes: state.totalFocusMinutes,
+          liveFocusMinutes: state.todayFocusMinutes,
+          weeklyMinutesGoal: state.weeklyMinutesGoal,
+          weeklyTodoGoal: state.weeklyTodoGoal,
+          onMinutesGoalChanged: (value) =>
+              context.read<AppState>().updateWeeklyMinutesGoal(value),
+          onTodoGoalChanged: (value) =>
+              context.read<AppState>().updateWeeklyTodoGoal(value),
         ),
         const SizedBox(height: 24),
         const Text(
@@ -273,11 +279,19 @@ class _ActivitySummary extends StatelessWidget {
     required this.days,
     required this.todos,
     required this.liveFocusMinutes,
+    required this.weeklyMinutesGoal,
+    required this.weeklyTodoGoal,
+    required this.onMinutesGoalChanged,
+    required this.onTodoGoalChanged,
   });
 
   final List<StudyDay> days;
   final List<TodoItem> todos;
   final int liveFocusMinutes;
+  final int weeklyMinutesGoal;
+  final int weeklyTodoGoal;
+  final ValueChanged<int> onMinutesGoalChanged;
+  final ValueChanged<int> onTodoGoalChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +324,23 @@ class _ActivitySummary extends StatelessWidget {
         values: minutes,
         peak: minutePeak,
         color: AppColors.teal,
-        valueLabel: (index) => '${minutes[index]}m',
+        valueLabel: (index) => '${minutes[index]}/${[
+          weeklyMinutesGoal,
+          weeklyMinutesGoal * 4,
+          weeklyMinutesGoal * 12,
+        ][index]}m',
+        goals: [
+          weeklyMinutesGoal,
+          weeklyMinutesGoal * 4,
+          weeklyMinutesGoal * 12,
+        ],
+        onSetGoal: () => _showGoalDialog(
+          context,
+          title: 'Weekly minutes goal',
+          current: weeklyMinutesGoal,
+          suffix: 'minutes',
+          onSave: onMinutesGoalChanged,
+        ),
       ),
       const SizedBox(height: 10),
       _ActivityBarGroup(
@@ -319,7 +349,15 @@ class _ActivitySummary extends StatelessWidget {
         values: <int>[for (final value in todoTotals) value.$1],
         peak: todoPeak,
         valueLabel: (index) =>
-            '${todoTotals[index].$2}/${todoTotals[index].$1}',
+          '${todoTotals[index].$2}/${[weeklyTodoGoal, weeklyTodoGoal * 4, weeklyTodoGoal * 12][index]}',
+        goals: [weeklyTodoGoal, weeklyTodoGoal * 4, weeklyTodoGoal * 12],
+        onSetGoal: () => _showGoalDialog(
+          context,
+          title: 'Weekly todo goal',
+          current: weeklyTodoGoal,
+          suffix: 'completed todos',
+          onSave: onTodoGoalChanged,
+        ),
         segments: <({int pending, int done})>[
           for (final value in todoTotals)
             (
@@ -355,6 +393,43 @@ class _ActivitySummary extends StatelessWidget {
     final done = todos.where((todo) => todo.isDone).length;
     return (logged.$1 + todos.length, logged.$2 + done);
   }
+
+  Future<void> _showGoalDialog(
+    BuildContext context, {
+    required String title,
+    required int current,
+    required String suffix,
+    required ValueChanged<int> onSave,
+  }) async {
+    final controller = TextEditingController(text: '$current');
+    final value = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(suffixText: suffix),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              int.tryParse(controller.text.trim()),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value != null && value > 0 && context.mounted) onSave(value);
+  }
 }
 
 class _ActivityBarGroup extends StatelessWidget {
@@ -366,6 +441,8 @@ class _ActivityBarGroup extends StatelessWidget {
     required this.valueLabel,
     this.color,
     this.segments,
+    required this.goals,
+    required this.onSetGoal,
   });
 
   final String title;
@@ -375,6 +452,8 @@ class _ActivityBarGroup extends StatelessWidget {
   final String Function(int index) valueLabel;
   final Color? color;
   final List<({int pending, int done})>? segments;
+  final List<int> goals;
+  final VoidCallback onSetGoal;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -391,6 +470,17 @@ class _ActivityBarGroup extends StatelessWidget {
                     fontSize: 9,
                     letterSpacing: 1.1,
                     fontWeight: FontWeight.bold)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: onSetGoal,
+              icon: const Icon(Icons.flag_outlined, size: 14),
+              label: const Text('Set weekly goal'),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 24),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
             if (segments != null) ...[
               const Spacer(),
               const _ActivityLegend(color: AppColors.pink, label: 'pending'),
@@ -415,14 +505,14 @@ class _ActivityBarGroup extends StatelessWidget {
                   child: segments == null
                       ? LinearProgressIndicator(
                           minHeight: 7,
-                          value: values[index] / peak,
+                          value: values[index] / max(peak, goals[index]),
                           backgroundColor: AppColors.mantle,
                           color: color,
                         )
                       : _TodoBar(
                           pending: segments![index].pending,
                           done: segments![index].done,
-                          totalPeak: peak,
+                          totalPeak: max(peak, goals[index]),
                         ),
                 ),
                 SizedBox(
