@@ -137,7 +137,9 @@ class AppState extends ChangeNotifier {
     final logged = days
         .where((day) => _dateKey(day.date) == today)
         .fold<int>(0, (sum, day) => sum + day.minutes);
-    final timerMinutes = _focusElapsedSeconds ~/ 60;
+    final timerMinutes = _focusElapsedSeconds == 0
+        ? 0
+        : (_focusElapsedSeconds / 60).ceil();
     return logged > timerMinutes ? logged : timerMinutes;
   }
 
