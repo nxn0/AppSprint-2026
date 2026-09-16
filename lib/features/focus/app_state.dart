@@ -69,7 +69,12 @@ class AppState extends ChangeNotifier {
     selectedDeckId = decks.firstOrNull?.id;
     days = store.days;
     todos = store.todos;
-    completedSessions = store.completedSessions;
+    completedSessions = store.completedSessions >= 5
+        ? 0
+        : store.completedSessions.clamp(0, 4);
+    if (store.completedSessions != completedSessions) {
+      await store.saveCompletedSessions(completedSessions);
+    }
     totalFocusMinutes = store.totalFocusMinutes;
     focusMinutes = store.focusMinutes;
     breakMinutes = store.breakMinutes;
@@ -132,7 +137,8 @@ class AppState extends ChangeNotifier {
     final logged = days
         .where((day) => _dateKey(day.date) == today)
         .fold<int>(0, (sum, day) => sum + day.minutes);
-    return logged + (_focusElapsedSeconds ~/ 60);
+    final timerMinutes = _focusElapsedSeconds ~/ 60;
+    return logged > timerMinutes ? logged : timerMinutes;
   }
 
   Future<void> updateTimerSettings({
@@ -188,20 +194,15 @@ class AppState extends ChangeNotifier {
           isRunning = false;
           isBreak = false;
           isLongBreak = false;
+          completedSessions = 0;
+          unawaited(store.saveCompletedSessions(completedSessions));
           remaining = Duration(minutes: focusMinutes);
         } else {
           isBreak = false;
           remaining = Duration(minutes: focusMinutes);
         }
       } else {
-        completedSessions++;
-        unawaited(store.saveCompletedSessions(completedSessions));
-        _focusElapsedSeconds = 0;
-        isBreak = true;
-        isLongBreak = completedSessions % 5 == 0;
-        remaining = Duration(
-          minutes: isLongBreak ? breakMinutes * 5 : breakMinutes,
-        );
+        _completeFocusCycle();
       }
     } else {
       remaining -= const Duration(seconds: 1);
@@ -211,22 +212,40 @@ class AppState extends ChangeNotifier {
 
   Future<void> skipTimer() async {
     final wasRunning = isRunning;
+    var shouldResume = wasRunning;
     _timer?.cancel();
     isRunning = false;
     if (isBreak) {
-      isBreak = false;
-      isLongBreak = false;
-      remaining = Duration(minutes: focusMinutes);
+      if (isLongBreak) {
+        isBreak = false;
+        isLongBreak = false;
+        completedSessions = 0;
+        await store.saveCompletedSessions(completedSessions);
+        remaining = Duration(minutes: focusMinutes);
+        shouldResume = false;
+      } else {
+        isBreak = false;
+        remaining = Duration(minutes: focusMinutes);
+      }
     } else {
-      isBreak = true;
-      isLongBreak = false;
-      remaining = Duration(minutes: breakMinutes);
+      _completeFocusCycle();
     }
-    if (wasRunning) {
+    if (shouldResume) {
       isRunning = true;
       _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     }
     notifyListeners();
+  }
+
+  void _completeFocusCycle() {
+    completedSessions++;
+    unawaited(store.saveCompletedSessions(completedSessions));
+    _focusElapsedSeconds = 0;
+    isBreak = true;
+    isLongBreak = completedSessions == 5;
+    remaining = Duration(
+      minutes: isLongBreak ? breakMinutes * 5 : breakMinutes,
+    );
   }
 
   Future<void> logRest(String reason) async {
@@ -385,7 +404,8 @@ class AppState extends ChangeNotifier {
     }
     final today = DateTime.now();
     final key = _dateKey(today);
-    if (restAllowance != 3) {
+    final studied = minutes > 0 || reviews > 0;
+    if (studied && restAllowance != 3) {
       restAllowance = 3;
       await store.saveRestAllowance(restAllowance);
     }

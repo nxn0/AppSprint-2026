@@ -25,15 +25,23 @@ class PdfTextExtractorService {
       final extractor = PdfTextExtractor(document);
       final pageCount =
           document.pages.count < maxPages ? document.pages.count : maxPages;
-      return List.generate(
+      final text = List.generate(
         pageCount,
         (index) => extractor.extractText(
           startPageIndex: index,
           endPageIndex: index,
+          layoutText: true,
         ),
       ).join('\n');
+      return _normalizeExtractedText(text);
     } finally {
       document.dispose();
     }
   }
+
+  static String _normalizeExtractedText(String text) => text
+      .replaceAll(RegExp(r'(?<=[a-z])(?=[A-Z])'), ' ')
+      .replaceAll(RegExp(r'(?<=[,.;:!?])(?=[A-Za-z])'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
