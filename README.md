@@ -17,16 +17,15 @@
 
 ### Team Name
 
-`[Add team name]`
+meow
 
 ### Members
 
 | Name | Role |
 |---|---|
-| `[Add member]` | Developer |
-| `[Add member]` | Designer / Developer |
-| `[Add member]` | Developer |
-| `[Add member]` | Developer |
+| `Nandana Rajan` | Developer |
+| `Sandra. BA` | Designer |
+
 
 ### Challenge Track
 
@@ -66,8 +65,6 @@ All core data is stored locally on the device. No account or backend is required
 - Consecutive active-day streaks shared between the Focus and Streak screens.
 - Rest-day logging with grace-day handling.
 - Weekly goals for minutes studied and completed todos.
-- Monthly goals derived as weekly goal × 4.
-- Yearly goals derived as weekly goal × 12.
 - Persistent local settings and study history.
 - Editable user display name.
 
@@ -108,10 +105,6 @@ The demo should be no longer than two minutes and show:
 ## APK Download
 
 `[Add GitHub Releases APK URL]`
-
-The repository currently has a Linux build workflow. The Android APK should be uploaded to a public GitHub Release before submission.
-
----
 
 ## Tech Stack
 
@@ -238,7 +231,6 @@ The Focus and Streak pages therefore use the same live activity data. A focus mi
 
 ## Future Improvements
 
-- Add a completed Android APK and store-ready release workflow.
 - Add calendar-style historical activity views.
 - Add deck rename and bulk card management.
 - Add accessibility labels and larger-text layout testing.
